@@ -1,0 +1,21 @@
+{% extends "gestao/base.html" %}{% load gestao_tags %}
+{% block titulo %}Início{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><div><h1>Olá, {{ user.first_name|default:user.username }}</h1><p class="suave">{{ hoje|date:"l, j \d\e F \d\e Y" }}</p></div></div>
+{% if cartoes %}<div class="grade">{% for rotulo, valor, nota, destino in cartoes %}
+  <a class="card cartao-numero" href="{% url destino %}"><div class="rotulo">{{ rotulo }}</div><div class="valor">{{ valor }}</div><div class="nota">{{ nota }}</div></a>{% endfor %}</div>{% endif %}
+<div class="duas">
+  <section class="card"><h2>Próximos eventos</h2>
+    {% for e in proximos_eventos %}<p><b>{{ e.inicio|date:"d/m · H:i" }}</b> — {{ e.titulo }}<br><span class="suave">{{ e.get_tipo_display }}{% if e.entidade %} · {{ e.entidade }}{% endif %}{% if e.local %} · {{ e.local }}{% endif %}</span></p>
+    {% empty %}<p class="suave">Nenhum evento agendado.</p>{% endfor %}
+  </section>
+  <section class="card"><h2>Aniversariantes de {{ hoje|date:"F" }}</h2>
+    {% for i in aniversariantes %}<p><b>{{ i.data_nascimento|date:"d/m" }}</b> — Ir∴ {{ i.nome }}{% if i.data_nascimento.day == hoje.day %} {% selo "é hoje!" "ok" %}{% endif %}</p>
+    {% empty %}<p class="suave">Nenhum aniversariante neste mês.</p>{% endfor %}
+  </section>
+</div>
+<section class="card"><h2>Informativos</h2>
+  {% for i in informativos %}<h3>{{ i.titulo }} <span class="suave" style="font-weight:400">· {{ i.data|date:"d/m/Y" }}</span></h3><p>{{ i.texto|linebreaksbr }}</p>
+  {% empty %}<p class="suave">Nenhum informativo publicado.</p>{% endfor %}
+</section>
+{% endblock %}

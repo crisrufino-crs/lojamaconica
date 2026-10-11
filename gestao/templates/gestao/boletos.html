@@ -1,0 +1,25 @@
+{% extends "gestao/base.html" %}{% load gestao_tags %}
+{% block titulo %}Boletos{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><div><h1>Boletos</h1><p class="suave">Gere os boletos, envie a remessa ao banco e depois suba o arquivo de retorno: as mensalidades pagas são quitadas sozinhas.</p></div></div>
+<div class="nota-aviso"><b>Antes de cobrar de verdade:</b> todo banco exige um teste (homologação) dos arquivos e um ajuste fino do código de barras ao padrão dele. Até isso ser feito com o banco da Loja, trate os boletos gerados aqui como demonstração. Detalhes no LEIA-ME.</div>
+{% if not contas %}<div class="mensagem error">Nenhuma conta está pronta para emitir boletos. Em <a href="{% url 'contas_lista' %}">Contas e caixas</a>, preencha código do banco, agência e número da conta.</div>{% else %}
+<div class="grade">
+  <form method="post" class="card">{% csrf_token %}<input type="hidden" name="acao" value="lote"><h3>1. Gerar boletos</h3><p class="suave">{{ sem_boleto }} conta(s) a receber de Irmãos ainda sem boleto.</p>
+    <select name="conta" style="margin-bottom:12px" aria-label="Conta">{% for c in contas %}<option value="{{ c.pk }}">{{ c }}</option>{% endfor %}</select><button class="botao pequeno"{% if not sem_boleto %} disabled{% endif %}>Gerar todos</button></form>
+  <form method="post" class="card">{% csrf_token %}<input type="hidden" name="acao" value="remessa"><h3>2. Gerar remessa</h3><p class="suave">{{ aguardando }} boleto(s) aguardando envio ao banco.</p>
+    <select name="conta" style="margin-bottom:12px" aria-label="Conta">{% for c in contas %}<option value="{{ c.pk }}">{{ c }}</option>{% endfor %}</select><button class="botao pequeno"{% if not aguardando %} disabled{% endif %}>Gerar arquivo de remessa</button></form>
+  <form method="post" class="card" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="acao" value="retorno"><h3>3. Baixa automática</h3><p class="suave">Envie o arquivo de retorno (CNAB 240) que o banco disponibiliza.</p>
+    <input type="file" name="arquivo" required style="margin-bottom:12px" aria-label="Arquivo de retorno"><button class="botao pequeno">Processar retorno</button></form>
+</div>{% endif %}
+<h2 style="margin-top:32px">Boletos emitidos</h2>
+<div class="card justo">{% if lista %}<div class="rolagem"><table><thead><tr><th>Nosso número</th><th>Pagador</th><th>Descrição</th><th>Vencimento</th><th class="num">Valor</th><th>Situação</th><th>Remessa</th><th class="acoes"></th></tr></thead><tbody>
+  {% for b in lista %}<tr><td>{{ b.nosso_numero }}</td><td>{{ b.lancamento.quem }}</td><td>{{ b.lancamento.descricao }}</td><td>{{ b.lancamento.vencimento|date:"d/m/Y" }}</td><td class="num">{{ b.lancamento.valor|brl }}</td>
+    <td>{% if b.status == "pago" %}{% selo b.get_status_display "ok" %}{% elif b.status == "baixado" %}{% selo b.get_status_display "ruim" %}{% else %}{% selo b.get_status_display "atencao" %}{% endif %}</td><td>{{ b.remessa.numero|default:"—" }}</td>
+    <td class="acoes"><a href="{% url 'boleto_ver' b.pk %}">Abrir</a></td></tr>{% endfor %}
+</tbody></table></div>{% else %}<div class="vazio">Nenhum boleto emitido ainda.</div>{% endif %}</div>
+<div class="duas">
+  <section class="card"><h2>Remessas</h2>{% for r in remessas %}<p><b>Nº {{ r.numero }}</b> · {{ r.gerada_em|date:"d/m/Y H:i" }} · {{ r.quantidade }} boleto(s) · {{ r.valor_total|brl }} · <a href="{% url 'remessa_baixar' r.pk %}">baixar arquivo</a></p>{% empty %}<p class="suave">Nenhuma remessa gerada.</p>{% endfor %}</section>
+  <section class="card"><h2>Retornos processados</h2>{% for r in retornos %}<details style="margin-bottom:8px"><summary><b>{{ r.processado_em|date:"d/m/Y H:i" }}</b> · {{ r.quitados }} quitado(s) · {{ r.valor_total|brl }}{% if r.nao_encontrados %} · {{ r.nao_encontrados }} não encontrado(s){% endif %}</summary><p class="ajuda">{{ r.arquivo_nome }}<br>{{ r.resumo|linebreaksbr }}</p></details>{% empty %}<p class="suave">Nenhum retorno processado.</p>{% endfor %}</section>
+</div>
+{% endblock %}

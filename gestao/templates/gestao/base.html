@@ -1,0 +1,48 @@
+{% load static gestao_tags %}<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titulo %}{{ titulo|default:"Gestão da Loja" }}{% endblock %}{% if loja %} · {{ loja.nome }}{% endif %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'gestao/estilo.css' %}">
+<link rel="manifest" href="{% url 'manifesto' %}">
+<meta name="theme-color" content="{{ cor_primaria }}">
+<style>:root{--primaria:{{ cor_primaria }};--destaque:{{ cor_destaque }};--sobre-primaria:{{ texto_primaria }}}</style>
+</head>
+<body>
+{% block corpo %}
+<header class="topo"><div class="pagina">
+  <a class="marca" href="{% url 'inicio' %}">
+    {% if loja and loja.brasao %}<img src="{% url 'arquivo' loja.brasao.name %}" alt="">{% else %}<span class="emblema">{{ loja.nome|default:"G"|slice:":1" }}</span>{% endif %}
+    <span>{% if loja %}{{ loja.nome }}{% if loja.numero %} nº {{ loja.numero }}{% endif %}<small>{{ loja.potencia }}{% if loja.oriente %} · Or∴ de {{ loja.oriente }}{% endif %}</small>{% else %}Gestão de Lojas{% endif %}</span>
+  </a>
+  <nav class="conta" aria-label="Minha conta">
+    <span>{{ user }}</span>
+    {% if loja %}<a href="{% url 'notificacoes' %}">Avisos{% if nao_lidas %}<span class="contador">{{ nao_lidas }}</span>{% endif %}</a>{% endif %}
+    <a href="{% url 'senha_trocar' %}">Trocar senha</a>
+    <form method="post" action="{% url 'sair' %}">{% csrf_token %}<button>Sair</button></form>
+  </nav>
+</div></header>
+<nav class="abas" aria-label="Módulos"><div class="pagina">
+  {% if loja %}
+  <a href="{% url 'inicio' %}" class="{% if not modulo %}ativa{% endif %}">Início</a>
+  <a href="{% url 'minha_area' %}" class="{% if modulo == 'minha' %}ativa{% endif %}">Minha área</a>
+  {% for chave_modulo, nome_modulo in modulos_do_usuario %}<a href="{% url 'modulo' chave_modulo %}" class="{% if modulo == chave_modulo %}ativa{% endif %}">{{ nome_modulo }}</a>{% endfor %}
+  {% if modulos_do_usuario %}<a href="{% url 'relatorios' %}" class="{% if modulo == 'relatorios' %}ativa{% endif %}">Relatórios</a>{% endif %}
+  {% if eh_master %}<a href="{% url 'modulo' 'admin' %}" class="{% if modulo == 'admin' %}ativa{% endif %}">Administração</a>{% endif %}
+  {% endif %}
+  {% if user.is_superuser %}<a href="{% url 'plataforma_lojas' %}" class="{% if modulo == 'plataforma' %}ativa{% endif %}">Lojas (plataforma)</a>{% endif %}
+</div></nav>
+<main class="pagina">
+  {% with itens=MENUS|chave:modulo %}{% if itens %}<nav class="subabas" aria-label="Telas do módulo" style="margin-bottom:20px;margin-top:0">
+    {% for rotulo, nome in itens %}{% url nome as destino %}<a href="{{ destino }}" class="{% if destino in request.path %}ativa{% endif %}">{{ rotulo }}</a>{% endfor %}
+  </nav>{% endif %}{% endwith %}
+  {% for m in messages %}<div class="mensagem {{ m.tags }}" role="status">{{ m }}</div>{% endfor %}
+  {% block conteudo %}{% endblock %}
+</main>
+{% endblock %}
+{% block scripts %}{% endblock %}
+</body>
+</html>

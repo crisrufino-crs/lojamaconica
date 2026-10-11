@@ -1,0 +1,8 @@
+{% extends "gestao/base.html" %}
+{% block titulo %}Relatórios{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><div><h1>Relatórios</h1><p class="suave">Todos podem ser impressos, salvos em PDF ou abertos no Excel.</p></div></div>
+{% for nome, lista in grupos %}<h2 style="margin-top:24px">{{ nome }}</h2>
+<div class="grade">{% for r in lista %}<a class="card cartao-numero" href="{% url 'relatorio' r.slug %}"><h3>{{ r.titulo }}</h3><div class="nota">{{ r.descricao }}</div></a>{% endfor %}</div>
+{% empty %}<div class="card vazio">Seu usuário não tem acesso a relatórios de nenhum módulo.</div>{% endfor %}
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "gestao/base.html" %}
+{% block conteudo %}
+<div class="card" style="max-width:640px">
+  <h1>{{ titulo }}</h1>
+  <p>{{ texto }}</p>
+  <form method="post">{% csrf_token %}
+    {% if contas %}<div class="campo" style="margin-bottom:16px"><label for="conta">Conta que vai emitir o boleto</label>
+      <select name="conta" id="conta">{% for c in contas %}<option value="{{ c.pk }}">{{ c }}</option>{% endfor %}</select></div>{% endif %}
+    <div class="rodape-form"><button class="botao">{{ botao }}</button><a class="botao claro" href="{{ voltar }}">Voltar</a></div>
+  </form>
+</div>
+{% endblock %}

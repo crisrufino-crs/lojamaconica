@@ -1,0 +1,43 @@
+{% extends "gestao/base.html" %}{% load gestao_tags %}
+{% block titulo %}{{ irmao.nome }}{% endblock %}
+{% block conteudo %}
+<div class="cabecalho">
+  <div style="display:flex;gap:16px;align-items:center">
+    {% if irmao.foto %}<img src="{% url 'arquivo' irmao.foto.name %}" alt="" style="width:72px;height:72px;border-radius:12px;object-fit:cover">{% endif %}
+    <div><h1>Ir∴ {{ irmao.nome }}</h1><p class="suave">{{ irmao.grau|default:"Sem grau registrado" }}{% if irmao.cargo %} · {{ irmao.cargo }}{% endif %} · {{ irmao.get_situacao_display }}</p></div>
+  </div>
+  <div class="acoes"><button class="botao claro" onclick="window.print()">Imprimir ficha</button><a class="botao" href="{% url 'irmaos_editar' irmao.pk %}?voltar={{ voltar_ficha }}">Alterar cadastro</a></div>
+</div>
+<section class="card"><h2>Dados cadastrais</h2>
+  <dl class="lista-dados">
+    <div><dt>CIM / cadastro</dt><dd>{{ irmao.cim|fmt }}</dd></div><div><dt>CPF</dt><dd>{{ irmao.cpf|fmt }}</dd></div><div><dt>RG</dt><dd>{{ irmao.rg|fmt }}</dd></div>
+    <div><dt>Nascimento</dt><dd>{{ irmao.data_nascimento|fmt }}</dd></div><div><dt>Naturalidade</dt><dd>{{ irmao.naturalidade|fmt }}</dd></div>
+    <div><dt>Estado civil</dt><dd>{{ irmao.get_estado_civil_display|fmt }}</dd></div><div><dt>Profissão</dt><dd>{{ irmao.profissao|fmt }}</dd></div>
+    <div><dt>E-mail</dt><dd>{{ irmao.email|fmt }}</dd></div><div><dt>Celular</dt><dd>{{ irmao.celular|fmt }}</dd></div><div><dt>Telefone</dt><dd>{{ irmao.telefone|fmt }}</dd></div>
+    <div><dt>Endereço</dt><dd>{{ irmao.endereco|fmt }}{% if irmao.bairro %}, {{ irmao.bairro }}{% endif %}</dd></div>
+    <div><dt>Cidade</dt><dd>{{ irmao.cidade|fmt }}{% if irmao.uf %}/{{ irmao.uf }}{% endif %}{% if irmao.cep %} · CEP {{ irmao.cep }}{% endif %}</dd></div>
+    <div><dt>Pai</dt><dd>{{ irmao.nome_pai|fmt }}</dd></div><div><dt>Mãe</dt><dd>{{ irmao.nome_mae|fmt }}</dd></div>
+    <div><dt>Iniciação</dt><dd>{{ irmao.data_iniciacao|fmt }}</dd></div><div><dt>Filiação à Loja</dt><dd>{{ irmao.data_filiacao|fmt }}</dd></div>
+    <div><dt>Acesso ao sistema</dt><dd>{% if usuario_do_irmao %}{{ usuario_do_irmao.username }}{% else %}Ainda não tem usuário{% endif %}</dd></div>
+    {% for rotulo, valor in extras %}<div><dt>{{ rotulo }}</dt><dd>{{ valor }}</dd></div>{% endfor %}
+  </dl>
+  {% if irmao.observacoes %}<p style="margin-top:16px"><b>Observações:</b> {{ irmao.observacoes|linebreaksbr }}</p>{% endif %}
+</section>
+<div class="duas">
+  <section class="card"><div class="cabecalho"><h2 style="margin:0">Dependentes</h2><a class="botao claro pequeno" href="{% url 'dependentes_novo' %}?irmao={{ irmao.pk }}&voltar={{ voltar_ficha }}">+ Incluir</a></div>
+    {% for d in dependentes %}<p><b>{{ d.nome }}</b> — {{ d.get_parentesco_display }}{% if d.data_nascimento %} · {{ d.data_nascimento|date:"d/m/Y" }}{% endif %}{% if d.celular %} · {{ d.celular }}{% endif %} <a class="nao-imprimir" href="{% url 'dependentes_editar' d.pk %}?voltar={{ voltar_ficha }}">alterar</a></p>
+    {% empty %}<p class="suave">Nenhum dependente cadastrado.</p>{% endfor %}
+  </section>
+  <section class="card"><div class="cabecalho"><h2 style="margin:0">Controle de graus</h2><a class="botao claro pequeno" href="{% url 'graus-historico_novo' %}?irmao={{ irmao.pk }}&voltar={{ voltar_ficha }}">+ Registrar grau</a></div>
+    {% for g in graus %}<p><b>{{ g.grau }}</b> — {{ g.data|date:"d/m/Y" }}{% if g.observacao %} · <span class="suave">{{ g.observacao }}</span>{% endif %}</p>
+    {% empty %}<p class="suave">Nenhum grau registrado. Registre a iniciação para o grau aparecer no cadastro.</p>{% endfor %}
+  </section>
+</div>
+<section class="card"><h2>Frequência</h2>{% include "gestao/_frequencia.html" %}
+  {% if licencas %}<p style="margin-top:16px"><b>Licenças:</b> {% for l in licencas %}{{ l.inicio|date:"d/m/Y" }} a {{ l.fim|date:"d/m/Y" }}{% if l.motivo %} ({{ l.motivo }}){% endif %}{% if not forloop.last %}; {% endif %}{% endfor %}</p>{% endif %}
+  {% if visitas %}<p><b>Últimas visitas:</b> {% for v in visitas %}{{ v.data|date:"d/m/Y" }} — {{ v.onde }}{% if not forloop.last %}; {% endif %}{% endfor %}</p>{% endif %}
+</section>
+{% if abertos is not None %}<section class="card"><h2>Tesouraria — em aberto</h2>
+  {% for l in abertos %}<p class="{% if l.vencido %}erro-campo{% endif %}">{{ l.vencimento|date:"d/m/Y" }} — {{ l.descricao }} — <b>{{ l.valor|brl }}</b>{% if l.vencido %} (vencido){% endif %}</p>{% empty %}<p class="suave">Nada em aberto.</p>{% endfor %}
+</section>{% endif %}
+{% endblock %}

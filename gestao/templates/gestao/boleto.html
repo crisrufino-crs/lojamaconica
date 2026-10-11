@@ -1,0 +1,17 @@
+{% extends "gestao/base.html" %}{% load gestao_tags %}
+{% block titulo %}Boleto{% endblock %}
+{% block conteudo %}
+<div class="cabecalho nao-imprimir"><div><h1>Boleto</h1><p class="suave">{{ l.descricao }} · {{ b.get_status_display }}</p></div>
+  <div class="acoes"><button class="botao" onclick="window.print()">Imprimir / salvar em PDF</button>{% if modulo %}<a class="botao claro" href="{% url 'boletos' %}">Voltar</a>{% else %}<a class="botao claro" href="{% url 'minha_area' %}">Voltar</a>{% endif %}</div></div>
+{% if b.status == "gerado" or b.status == "remetido" %}<div class="nota-aviso"><b>Ainda não pode ser pago:</b> este boleto {% if b.status == "gerado" %}ainda não foi enviado ao banco{% else %}foi enviado ao banco e aguarda a confirmação de registro{% endif %}. O pagamento só é aceito depois que o banco registra o boleto.</div>{% endif %}
+{% if b.status == "pago" %}<div class="mensagem success">Este boleto já foi pago em {{ l.data_pagamento|date:"d/m/Y" }}.</div>{% endif %}
+<div class="boleto">
+  <div class="faixa"><b>{{ b.conta.banco_nome|default:"Banco" }}</b><b>{{ b.conta.banco_codigo }}</b><span>{{ b.linha_digitavel }}</span></div>
+  <div class="linha-b"><div class="cel"><small>Local de pagamento</small>Pagável em qualquer banco até o vencimento</div><div class="cel"><small>Vencimento</small><b>{{ l.vencimento|date:"d/m/Y" }}</b></div></div>
+  <div class="linha-b"><div class="cel"><small>Beneficiário</small>{{ loja.nome }}{% if loja.cnpj %} — CNPJ {{ loja.cnpj }}{% endif %}</div><div class="cel"><small>Agência / código do beneficiário</small>{{ b.conta.agencia }} / {{ b.conta.conta }}{% if b.conta.conta_dv %}-{{ b.conta.conta_dv }}{% endif %}</div></div>
+  <div class="linha-b"><div class="cel"><small>Data do documento</small>{{ b.gerado_em|date:"d/m/Y" }}</div><div class="cel"><small>Nº do documento</small>{{ l.pk }}</div><div class="cel"><small>Carteira</small>{{ b.conta.carteira|default:"—" }}</div><div class="cel"><small>Nosso número</small>{{ b.nosso_numero }}</div></div>
+  <div class="linha-b"><div class="cel"><small>Instruções</small>{{ l.descricao }}<br>{{ loja.instrucoes_boleto }}</div><div class="cel"><small>(=) Valor do documento</small><b>{{ l.valor|brl }}</b></div></div>
+  <div class="linha-b"><div class="cel"><small>Pagador</small>{{ l.quem }}{% if l.irmao.cpf %} — CPF {{ l.irmao.cpf }}{% endif %}<br>{{ l.irmao.endereco }}{% if l.irmao.cidade %} — {{ l.irmao.cidade }}/{{ l.irmao.uf }}{% endif %}</div></div>
+  <svg viewBox="0 0 {{ largura_total }} 50" preserveAspectRatio="none" width="{{ largura_total }}" role="img" aria-label="Código de barras">{% for x, w in barras %}<rect x="{{ x }}" y="0" width="{{ w }}" height="50"/>{% endfor %}</svg>
+</div>
+{% endblock %}

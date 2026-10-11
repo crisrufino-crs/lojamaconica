@@ -1,0 +1,10 @@
+{% load gestao_tags %}
+<dl class="lista-dados">
+  <div><dt>Frequência em {{ ano }}</dt><dd><b style="font-size:22px">{% if freq.percentual is None %}—{% else %}{{ freq.percentual|floatformat:1 }}%{% endif %}</b>
+    {% if freq.percentual is not None %}{% if freq.apto %}{% selo "Apto a votar" "ok" %}{% else %}{% selo "Abaixo do mínimo" "ruim" %}{% endif %}{% endif %}</dd></div>
+  <div><dt>Sessões</dt><dd>{{ freq.sessoes }}</dd></div>
+  <div><dt>Presenças</dt><dd>{{ freq.presencas }}</dd></div>
+  <div><dt>Faltas</dt><dd>{{ freq.faltas }}</dd></div>
+  <div><dt>Faltas abonadas</dt><dd>{{ freq.abonos }}</dd></div>
+  <div><dt>Visitas a outras Lojas</dt><dd>{{ freq.visitas }}</dd></div>
+</dl>

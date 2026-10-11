@@ -1,0 +1,21 @@
+{% extends "gestao/base.html" %}{% load gestao_tags %}
+{% block titulo %}E-mails{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><div><h1>Disparo de e-mail</h1><p class="suave">Cada pessoa recebe o e-mail individualmente; ninguém vê o endereço dos outros.</p></div></div>
+{% if modo_teste %}<div class="nota-aviso"><b>Modo de teste:</b> o servidor de e-mail ainda não foi configurado. Os envios ficam registrados aqui, mas não chegam a ninguém.</div>{% endif %}
+<form method="post" class="card" novalidate>{% csrf_token %}
+  {% if form.errors %}<div class="mensagem error">Confira os campos destacados em vermelho.</div>{% endif %}
+  {% include "gestao/_campos.html" %}
+  <div class="rodape-form"><button class="botao">Enviar e-mail</button></div>
+</form>
+<h2 style="margin-top:32px">Últimos envios</h2>
+<div class="card justo">{% if enviados %}<div class="rolagem"><table><thead><tr><th>Enviado em</th><th>Assunto</th><th>Para</th><th class="num">Destinatários</th><th>Por</th></tr></thead><tbody>
+  {% for e in enviados %}<tr><td class="nowrap">{{ e.enviado_em|date:"d/m/Y H:i" }}</td><td>{{ e.assunto }}</td><td>{{ e.publico }}</td><td class="num">{{ e.total }}</td><td>{% if e.automatico %}automático{% else %}{{ e.enviado_por|default:"—" }}{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<div class="vazio">Nenhum e-mail enviado ainda.</div>{% endif %}</div>
+<script>
+(function(){var p=document.getElementById('id_publico');function ver(){var v=p.value;
+  document.getElementById('id_grau').closest('.campo').hidden=v!=='grau';
+  document.querySelector('[name=irmaos]').closest('.campo').hidden=v!=='escolher';}
+  if(p){p.addEventListener('change',ver);ver();}})();
+</script>
+{% endblock %}

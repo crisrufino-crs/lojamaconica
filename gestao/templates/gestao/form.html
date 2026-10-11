@@ -1,0 +1,16 @@
+{% extends "gestao/base.html" %}{% load gestao_tags %}
+{% block conteudo %}
+<div class="cabecalho"><div><h1>{{ titulo }}</h1>{% if ajuda %}<p class="suave">{{ ajuda }}</p>{% endif %}</div></div>
+{% if resumo %}<div class="card"><dl class="lista-dados">{% for rotulo, valor in resumo %}<div><dt>{{ rotulo }}</dt><dd>{{ valor|fmt }}</dd></div>{% endfor %}</dl></div>{% endif %}
+<form method="post" enctype="multipart/form-data" class="card" novalidate>
+  {% csrf_token %}
+  {% if request.GET.voltar %}<input type="hidden" name="voltar" value="{{ request.GET.voltar }}">{% endif %}
+  {% if form.non_field_errors %}<div class="mensagem error">{% for e in form.non_field_errors %}{{ e }} {% endfor %}</div>{% endif %}
+  {% if form.errors and not form.non_field_errors %}<div class="mensagem error">Confira os campos destacados em vermelho.</div>{% endif %}
+  {% include "gestao/_campos.html" %}
+  <div class="rodape-form">
+    <button class="botao">{{ botao|default:"Salvar" }}</button>
+    <a class="botao claro" href="{{ request.GET.voltar|default:voltar }}">Voltar sem salvar</a>
+  </div>
+</form>
+{% endblock %}

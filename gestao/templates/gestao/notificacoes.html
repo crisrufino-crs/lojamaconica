@@ -1,0 +1,10 @@
+{% extends "gestao/base.html" %}
+{% block titulo %}Avisos{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><div><h1>Avisos</h1><p class="suave">Aniversariantes do dia e lembretes de sessão e eventos chegam aqui automaticamente.</p></div>
+  <div class="acoes"><button class="botao claro" id="ativar-push" hidden>Ativar avisos neste celular</button></div></div>
+{% if not push_configurado %}<div class="nota-aviso">Os avisos já aparecem aqui dentro do sistema. Para também tocarem no celular, quem cuida do servidor precisa configurar as chaves de notificação (veja o LEIA-ME).</div>{% endif %}
+<div class="card justo">{% for n in lista %}<div style="padding:14px 24px;border-top:1px solid var(--borda)"><b>{{ n.titulo }}</b>{% if not n.lida %} <span class="selo atencao">novo</span>{% endif %}<br>{{ n.texto }}<br><span class="ajuda">{{ n.criada_em|date:"d/m/Y H:i" }}</span></div>
+{% empty %}<div class="vazio">Nenhum aviso por enquanto.</div>{% endfor %}</div>
+{% endblock %}
+{% block scripts %}{% include "gestao/_push.html" %}{% endblock %}

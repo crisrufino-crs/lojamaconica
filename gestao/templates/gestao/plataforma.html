@@ -1,0 +1,12 @@
+{% extends "gestao/base.html" %}
+{% block titulo %}Lojas{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><div><h1>Lojas da plataforma</h1><p class="suave">Cada Loja tem dados, usuários e personalização próprios. Entre em uma Loja para dar suporte.</p></div>
+  <div class="acoes"><a class="botao" href="{% url 'plataforma_nova_loja' %}">+ Nova Loja</a></div></div>
+<div class="card justo">{% if lojas %}<div class="rolagem"><table><thead><tr><th>Loja</th><th>Potência</th><th>Oriente</th><th>Irmãos</th><th>Usuários</th><th>Situação</th><th class="acoes"></th></tr></thead><tbody>
+{% for l in lojas %}<tr class="{% if not l.ativa %}apagado{% endif %}"><td><b>{{ l }}</b>{% if loja.pk == l.pk %} <span class="selo ok">você está aqui</span>{% endif %}</td><td>{{ l.potencia }}</td><td>{{ l.oriente }}{% if l.uf %}/{{ l.uf }}{% endif %}</td><td>{{ l.n_irmaos }}</td><td>{{ l.n_usuarios }}</td>
+  <td>{% if l.ativa %}<span class="selo ok">Liberada</span>{% else %}<span class="selo ruim">Bloqueada</span>{% endif %}</td>
+  <td class="acoes"><form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="loja" value="{{ l.pk }}">
+    <button class="botao pequeno" name="acao" value="entrar">Entrar</button> <button class="botao claro pequeno" name="acao" value="alternar">{% if l.ativa %}Bloquear{% else %}Liberar{% endif %}</button></form></td></tr>{% endfor %}
+</tbody></table></div>{% else %}<div class="vazio">Nenhuma Loja ainda. Clique em <b>+ Nova Loja</b>.</div>{% endif %}</div>
+{% endblock %}

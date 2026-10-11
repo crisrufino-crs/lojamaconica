@@ -1,0 +1,36 @@
+{% extends "gestao/base.html" %}{% load gestao_tags %}
+{% block titulo %}{{ recurso.titulo }}{% endblock %}
+{% block conteudo %}
+<div class="cabecalho">
+  <div><h1>{{ recurso.titulo }}</h1><p class="suave">{{ total }} registro{{ total|pluralize }}{% if recurso.ajuda %} · {{ recurso.ajuda }}{% endif %}</p></div>
+  <div class="acoes">
+    {% for rotulo, nome in recurso.acoes_topo %}<a class="botao claro" href="{% url nome %}">{{ rotulo }}</a>{% endfor %}
+    <button class="botao claro" onclick="window.print()">Imprimir</button>
+    {% if recurso.pode_incluir %}<a class="botao" href="{% url recurso.slug|add:'_novo' %}">+ Incluir</a>{% endif %}
+  </div>
+</div>
+{% if recurso.busca or filtros %}
+<form class="filtros" method="get">
+  {% if recurso.busca %}<label>Buscar<input type="search" name="q" value="{{ termo }}" placeholder="Digite parte do nome…"></label>{% endif %}
+  {% for f in filtros %}<label>{{ f.rotulo }}<select name="{{ f.nome }}"><option value="">Todos</option>{% for valor, rotulo in f.escolhas %}<option value="{{ valor }}"{% if valor == f.atual %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}</select></label>{% endfor %}
+  <button class="botao claro pequeno">Filtrar</button>
+  {% if parametros %}<a class="botao claro pequeno" href="?">Limpar</a>{% endif %}
+</form>
+{% endif %}
+<div class="card justo">
+  {% if linhas %}
+  <div class="rolagem"><table>
+    <thead><tr>{% for rotulo, coluna in recurso.colunas %}<th>{{ rotulo }}</th>{% endfor %}<th class="acoes"></th></tr></thead>
+    <tbody>{% for linha in linhas %}<tr class="{{ linha.classe }}">
+      {% for rotulo, coluna in recurso.colunas %}<td>{% celula linha.obj coluna %}</td>{% endfor %}
+      <td class="acoes">{% for rotulo, link in linha.acoes %}<a href="{{ link }}">{{ rotulo }}</a>{% endfor %}<a href="{% url recurso.slug|add:'_editar' linha.obj.pk %}">Alterar</a>{% if recurso.pode_excluir %}<a href="{% url recurso.slug|add:'_excluir' linha.obj.pk %}" style="color:var(--erro)">Excluir</a>{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% if pagina.paginator.num_pages > 1 %}<div class="paginacao"><span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span><span>
+    {% if pagina.has_previous %}<a href="?{{ parametros }}&pagina={{ pagina.previous_page_number }}">← Anterior</a>{% endif %}
+    {% if pagina.has_next %}&nbsp; <a href="?{{ parametros }}&pagina={{ pagina.next_page_number }}">Próxima →</a>{% endif %}</span></div>{% endif %}
+  {% else %}
+  <div class="vazio">{% if parametros %}Nada encontrado com esses filtros.{% else %}Ainda não há nada aqui.{% if recurso.pode_incluir %} Clique em <b>+ Incluir</b> para cadastrar o primeiro.{% endif %}{% endif %}</div>
+  {% endif %}
+</div>
+{% endblock %}

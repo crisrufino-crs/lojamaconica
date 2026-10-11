@@ -1,0 +1,46 @@
+{% extends "gestao/base.html" %}{% load gestao_tags %}
+{% block titulo %}Presença{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><div><h1>{{ sessao }}</h1><p class="suave">{% if sessao.grau %}Grau {{ sessao.grau }} · {% endif %}Toque no botão de cada Irmão para marcar presença. Salva na hora.</p></div>
+  <div class="acoes">
+    <form method="post">{% csrf_token %}<input type="hidden" name="acao" value="atualizar"><button class="botao claro">Atualizar lista</button></form>
+    <form method="post">{% csrf_token %}<input type="hidden" name="acao" value="todos"><button class="botao claro">Marcar todos presentes</button></form>
+    <a class="botao" href="{% url 'sessoes_lista' %}">Concluir</a></div></div>
+<div class="placar" aria-live="polite">
+  <span class="selo ok">Presentes: <b id="t-P">{{ resumo.P }}</b></span><span class="selo ruim">Faltas: <b id="t-F">{{ resumo.F }}</b></span>
+  <span class="selo atencao">Abonadas: <b id="t-A">{{ resumo.A }}</b></span><span class="selo">Licenciados: <b id="t-L">{{ resumo.L }}</b></span>
+  <span class="suave" id="estado-salvo"></span>
+</div>
+<div class="chamada">
+{% for p in presencas %}
+  <div class="linha" data-url="{% url 'presenca_marcar' p.pk %}">
+    <div class="nome">{{ p.irmao.nome }}<small>{{ p.irmao.grau|default:"" }}{% if p.irmao.cargo %} · {{ p.irmao.cargo }}{% endif %}</small></div>
+    <button type="button" class="alternar" data-status="{{ p.status }}" aria-pressed="{% if p.status == 'P' %}true{% else %}false{% endif %}">{{ p.get_status_display }}</button>
+    <select aria-label="Outra situação para {{ p.irmao.nome }}"><option value="">Outra situação…</option><option value="A">Abonar falta</option><option value="L">Licenciado</option><option value="F">Falta</option></select>
+    <input type="text" class="justificativa" placeholder="Motivo do abono (Enter para salvar)" value="{{ p.justificativa }}" maxlength="200" {% if p.status != 'A' %}hidden{% endif %} aria-label="Motivo do abono">
+  </div>
+{% empty %}<div class="card vazio">Nenhum Irmão na lista. Clique em “Atualizar lista”.</div>{% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}<script>
+(function () {
+  var rotulos = { P: 'Presente', F: 'Falta', A: 'Falta abonada', L: 'Licenciado' }, estado = document.getElementById('estado-salvo');
+  function gravar(linha, status, justificativa) {
+    var botao = linha.querySelector('.alternar'), campo = linha.querySelector('.justificativa'), anterior = botao.dataset.status;
+    botao.dataset.status = status; botao.textContent = rotulos[status]; botao.setAttribute('aria-pressed', status === 'P');
+    campo.hidden = status !== 'A';
+    var dados = new URLSearchParams({ status: status, justificativa: justificativa || '' });
+    fetch(linha.dataset.url, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRFToken': '{{ csrf_token }}' }, body: dados })
+      .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function (d) { ['P', 'F', 'A', 'L'].forEach(function (s) { document.getElementById('t-' + s).textContent = d.resumo[s]; }); estado.textContent = 'Salvo ✓'; })
+      .catch(function () { botao.dataset.status = anterior; botao.textContent = rotulos[anterior]; campo.hidden = anterior !== 'A';
+        estado.textContent = 'Não foi possível salvar. Confira a internet e tente de novo.'; });
+  }
+  document.querySelectorAll('.chamada .linha').forEach(function (linha) {
+    var campo = linha.querySelector('.justificativa');
+    linha.querySelector('.alternar').addEventListener('click', function () { gravar(linha, this.dataset.status === 'P' ? 'F' : 'P'); });
+    linha.querySelector('select').addEventListener('change', function () { if (this.value) { gravar(linha, this.value, campo.value); if (this.value === 'A') campo.focus(); } this.value = ''; });
+    campo.addEventListener('change', function () { gravar(linha, 'A', campo.value); });
+  });
+})();
+</script>{% endblock %}

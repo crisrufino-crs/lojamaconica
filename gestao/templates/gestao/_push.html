@@ -1,0 +1,21 @@
+{% if push_chave_publica %}<script>
+(function () {
+  var botao = document.getElementById('ativar-push');
+  if (!botao || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  function chave(b64) { var p = '='.repeat((4 - b64.length % 4) % 4), t = atob((b64 + p).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(t, function (c) { return c.charCodeAt(0); }); }
+  navigator.serviceWorker.register('/sw.js').then(function (reg) {
+    reg.pushManager.getSubscription().then(function (atual) { botao.hidden = !!atual; });
+    botao.addEventListener('click', function () {
+      botao.disabled = true;
+      Notification.requestPermission().then(function (permissao) {
+        if (permissao !== 'granted') { botao.disabled = false; botao.textContent = 'Avisos bloqueados no navegador'; return; }
+        return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chave('{{ push_chave_publica }}') }).then(function (sub) {
+          return fetch('{% url "push_inscrever" %}', { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+        }).then(function () { botao.textContent = 'Avisos ativados neste aparelho'; });
+      }).catch(function () { botao.disabled = false; botao.textContent = 'Não foi possível ativar. Tentar de novo'; });
+    });
+  });
+})();
+</script>{% endif %}

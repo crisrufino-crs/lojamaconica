@@ -1,0 +1,25 @@
+<div class="campos">
+{% for campo in form %}
+  {% if campo.is_hidden %}{{ campo }}{% else %}
+  <div class="campo{% if campo.errors %} com-erro{% endif %}{% if campo.field.widget.input_type == 'checkbox' and not campo.field.widget.allow_multiple_selected or campo.field.widget.attrs.rows or campo.field.widget.allow_multiple_selected %} largo{% endif %}">
+    {% if campo.field.widget.input_type == 'checkbox' and not campo.field.widget.allow_multiple_selected %}
+      <label class="marcar">{{ campo }} <span>{{ campo.label }}</span></label>
+    {% elif campo.field.widget.allow_multiple_selected %}
+      <span class="rotulo{% if campo.field.required %} obrigatorio{% endif %}">{{ campo.label }}
+        <a href="#" class="nao-imprimir" data-marcar="1" style="font-weight:400;margin-left:8px">marcar todos</a>
+        <a href="#" class="nao-imprimir" data-marcar="0" style="font-weight:400;margin-left:8px">desmarcar todos</a></span>
+      <div class="opcoes">{{ campo }}</div>
+    {% else %}
+      <label for="{{ campo.id_for_label }}" class="{% if campo.field.required %}obrigatorio{% endif %}">{{ campo.label }}</label>
+      {{ campo }}
+    {% endif %}
+    {% for erro in campo.errors %}<span class="erro-campo">{{ erro }}</span>{% endfor %}
+    {% if campo.help_text %}<span class="ajuda">{{ campo.help_text }}</span>{% endif %}
+  </div>
+  {% endif %}
+{% endfor %}
+</div>
+<script>
+document.querySelectorAll('[data-marcar]').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault();
+  a.closest('.campo').querySelectorAll('input[type=checkbox]').forEach(function(c){c.checked=a.dataset.marcar==='1'})})});
+</script>

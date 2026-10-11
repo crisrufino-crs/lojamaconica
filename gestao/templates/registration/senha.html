@@ -1,0 +1,7 @@
+{% extends "gestao/base.html" %}
+{% block corpo %}<div class="entrada"><form method="post" class="card" novalidate>{% csrf_token %}
+  <h1>{{ titulo }}</h1>{% if user.is_authenticated and user.deve_trocar_senha %}<div class="nota-aviso">Você entrou com a senha enviada por e-mail. Crie agora uma senha só sua para continuar.</div>{% endif %}{% if texto %}<p class="suave">{{ texto }}</p>{% endif %}
+  {% if validlink is False %}<div class="mensagem error">Este link já foi usado ou venceu. Peça um novo em “Esqueci minha senha”.</div><a class="botao" href="{% url 'senha_esqueci' %}">Pedir novo link</a>
+  {% else %}{% include "gestao/_campos.html" %}
+  <div class="rodape-form"><button class="botao">{{ botao }}</button><a class="botao claro" href="{% url 'inicio' %}">Voltar</a></div>{% endif %}
+</form></div>{% endblock %}

@@ -1,0 +1,9 @@
+Olá{% if user.first_name %}, {{ user.first_name }}{% endif %}!
+
+Recebemos um pedido para criar uma nova senha para o seu acesso ao sistema da Loja.
+Seu nome de acesso é: {{ user.get_username }}
+
+Para criar a senha, abra este link:
+{{ protocol }}://{{ domain }}{% url 'senha_nova' uidb64=uid token=token %}
+
+Se você não fez esse pedido, pode ignorar este e-mail.

@@ -1,0 +1,8 @@
+{% extends "gestao/base.html" %}
+{% block titulo %}{{ ata.titulo }}{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><div><h1>{{ ata.titulo }}</h1><p class="suave">{% if ata.numero %}Ata nº {{ ata.numero }} · {% endif %}Sessão de {{ ata.data|date:"d/m/Y" }}{% if ata.grau %} · Grau {{ ata.grau }}{% endif %} · {% if ata.aprovada %}Aprovada{% else %}Aguardando aprovação{% endif %}</p></div>
+  <div class="acoes">{% if ata.arquivo %}<a class="botao claro" href="{% url 'arquivo' ata.arquivo.name %}" target="_blank" rel="noopener">Abrir arquivo anexado</a>{% endif %}
+    <button class="botao claro" onclick="window.print()">Imprimir</button><a class="botao" href="{% url 'atas_editar' ata.pk %}">Alterar</a></div></div>
+<div class="card">{% if ata.texto %}{{ ata.texto|linebreaks }}{% else %}<p class="suave">Esta ata não tem texto digitado{% if ata.arquivo %} — o conteúdo está no arquivo anexado{% endif %}.</p>{% endif %}</div>
+{% endblock %}

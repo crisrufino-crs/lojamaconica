@@ -1,0 +1,14 @@
+{% extends "gestao/base.html" %}{% load gestao_tags %}
+{% block titulo %}{{ r.titulo }}{% endblock %}
+{% block conteudo %}
+<div class="so-imprimir"><b>{{ loja }}</b>{% if loja.potencia %} — {{ loja.potencia }}{% endif %}</div>
+<div class="cabecalho"><div><h1>{{ r.titulo }}</h1><p class="suave">{{ resultado.resumo|default:r.descricao }}</p></div>
+  <div class="acoes"><a class="botao claro" href="{% url 'relatorios' %}">Todos os relatórios</a><a class="botao claro" href="{{ link_csv }}">Abrir no Excel</a><button class="botao" onclick="window.print()">Imprimir / PDF</button></div></div>
+{% if form.fields %}<form class="filtros" method="get">{% for campo in form %}<label>{{ campo.label }}{{ campo }}</label>{% endfor %}<button class="botao claro pequeno">Atualizar</button></form>
+<p class="so-imprimir">{% for campo in form %}{{ campo.label }}: {{ campo.value|default:"todos" }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+<div class="card justo">{% if resultado.linhas %}<div class="rolagem"><table>
+  <thead><tr>{% for c in resultado.colunas %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for linha in resultado.linhas %}<tr class="{{ linha.classe }}">{% for c in linha %}<td>{% if linha.classe == "grupo" and c == "" %}{% else %}{{ c|fmt }}{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+</table></div>{% else %}<div class="vazio">Nenhum dado para os filtros escolhidos.</div>{% endif %}</div>
+<p class="ajuda">Emitido em {{ emitido_em|date:"d/m/Y H:i" }} por {{ user }}.</p>
+{% endblock %}

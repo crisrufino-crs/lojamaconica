@@ -1,0 +1,13 @@
+{% extends "gestao/base.html" %}
+{% block titulo %}Entrar{% endblock %}
+{% block corpo %}<div class="entrada"><form method="post" class="card" novalidate>{% csrf_token %}
+  <h1>Gestão da Loja</h1><p class="suave">Entre com o seu nome de acesso e a sua senha.</p>
+  {% if form.errors %}<div class="mensagem error">Nome de acesso ou senha incorretos. Confira e tente de novo.</div>{% endif %}
+  <input type="hidden" name="next" value="{{ next }}">
+  <div class="campos">
+    <div class="campo"><label for="id_username">Nome de acesso</label><input type="text" name="username" id="id_username" autocomplete="username" autofocus required value="{{ form.username.value|default:'' }}"></div>
+    <div class="campo"><label for="id_password">Senha</label><input type="password" name="password" id="id_password" autocomplete="current-password" required></div>
+  </div>
+  <div class="rodape-form"><button class="botao" style="flex:1">Entrar</button></div>
+  <p style="margin-top:16px;text-align:center"><a href="{% url 'senha_esqueci' %}">Esqueci minha senha</a></p>
+</form></div>{% endblock %}

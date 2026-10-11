@@ -1,0 +1,47 @@
+{% extends "gestao/base.html" %}{% load gestao_tags %}
+{% block titulo %}Minha área{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><div><h1>Minha área</h1><p class="suave">Seus dados, sua frequência e seus lançamentos na Tesouraria.</p></div>
+  <div class="acoes"><button class="botao claro" id="ativar-push" hidden>Ativar avisos neste celular</button></div></div>
+{% if not irmao %}
+<div class="card vazio">Seu usuário ainda não está ligado a um cadastro de Irmão. Peça ao usuário Master da Loja para fazer essa ligação em Administração › Usuários.</div>
+{% else %}
+<section class="card"><h2>Meus dados</h2>
+  <dl class="lista-dados">
+    <div><dt>Nome</dt><dd>{{ irmao.nome }}</dd></div><div><dt>CIM</dt><dd>{{ irmao.cim|fmt }}</dd></div>
+    <div><dt>Grau</dt><dd>{{ irmao.grau|fmt }}</dd></div><div><dt>Cargo</dt><dd>{{ irmao.cargo|fmt }}</dd></div>
+    <div><dt>Situação</dt><dd>{{ irmao.get_situacao_display }}</dd></div><div><dt>Nascimento</dt><dd>{{ irmao.data_nascimento|fmt }}</dd></div>
+    <div><dt>Iniciação</dt><dd>{{ irmao.data_iniciacao|fmt }}</dd></div><div><dt>E-mail</dt><dd>{{ irmao.email|fmt }}</dd></div>
+    <div><dt>Celular</dt><dd>{{ irmao.celular|fmt }}</dd></div><div><dt>Endereço</dt><dd>{{ irmao.endereco|fmt }}{% if irmao.cidade %} — {{ irmao.cidade }}/{{ irmao.uf }}{% endif %}</dd></div>
+    {% for rotulo, valor in extras %}<div><dt>{{ rotulo }}</dt><dd>{{ valor }}</dd></div>{% endfor %}
+  </dl>
+  <p class="ajuda" style="margin-top:16px">Algum dado errado? Avise a Secretaria para corrigir.</p>
+</section>
+<div class="duas">
+  <section class="card"><h2>Dependentes</h2>
+    {% for d in dependentes %}<p><b>{{ d.nome }}</b> — {{ d.get_parentesco_display }}{% if d.data_nascimento %} · {{ d.data_nascimento|date:"d/m/Y" }}{% endif %}</p>{% empty %}<p class="suave">Nenhum dependente cadastrado.</p>{% endfor %}
+  </section>
+  <section class="card"><h2>Meus graus</h2>
+    {% for g in graus %}<p><b>{{ g.grau }}</b> — {{ g.data|date:"d/m/Y" }}</p>{% empty %}<p class="suave">Nenhum registro de grau.</p>{% endfor %}
+  </section>
+</div>
+<section class="card"><h2>Minha frequência</h2>
+  {% include "gestao/_frequencia.html" %}
+  {% if presencas %}<div class="rolagem" style="margin-top:16px"><table><thead><tr><th>Sessão</th><th>Tipo</th><th>Situação</th></tr></thead><tbody>
+    {% for p in presencas %}<tr><td>{{ p.sessao.data|date:"d/m/Y" }}</td><td>{{ p.sessao.get_tipo_display }}</td><td>{% if p.status == "P" %}{% selo "Presente" "ok" %}{% elif p.status == "F" %}{% selo "Falta" "ruim" %}{% else %}{% selo p.get_status_display "atencao" %}{% endif %}{% if p.justificativa %} <span class="suave">{{ p.justificativa }}</span>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% endif %}
+</section>
+<section class="card"><h2>Tesouraria — em aberto {% if total_aberto %}<span class="suave" style="font-weight:400">· total {{ total_aberto|brl }}</span>{% endif %}</h2>
+  {% if abertos %}<div class="rolagem"><table><thead><tr><th>Vencimento</th><th>Descrição</th><th class="num">Valor</th><th></th></tr></thead><tbody>
+    {% for l in abertos %}<tr class="{% if l.vencido %}atrasado{% endif %}"><td>{{ l.vencimento|date:"d/m/Y" }}{% if l.vencido %} {% selo "vencido" "ruim" %}{% endif %}</td><td>{{ l.descricao }}</td><td class="num">{{ l.valor|brl }}</td>
+      <td class="acoes">{% if l.boleto %}<a href="{% url 'boleto_ver' l.boleto.pk %}">Ver boleto</a>{% else %}<span class="suave">boleto ainda não emitido</span>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="suave">Nada em aberto. Você está em dia com a Tesouraria.</p>{% endif %}
+</section>
+<section class="card"><h2>Tesouraria — pagamentos registrados</h2>
+  {% if quitados %}<div class="rolagem"><table><thead><tr><th>Pago em</th><th>Descrição</th><th class="num">Valor</th></tr></thead><tbody>
+    {% for l in quitados %}<tr><td>{{ l.data_pagamento|date:"d/m/Y" }}</td><td>{{ l.descricao }}</td><td class="num">{{ l.valor_pago|brl }}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="suave">Nenhum pagamento registrado ainda.</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}{% include "gestao/_push.html" %}{% endblock %}

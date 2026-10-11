@@ -1,0 +1,12 @@
+{% extends "gestao/base.html" %}
+{% block titulo %}Excluir{% endblock %}
+{% block conteudo %}
+<div class="card" style="max-width:640px">
+  <h1>Excluir {{ recurso.singular }}?</h1>
+  <p>Você está prestes a excluir <b>{{ objeto }}</b>. Esta ação não pode ser desfeita.</p>
+  <form method="post" class="rodape-form">{% csrf_token %}
+    <button class="botao perigo">Sim, excluir</button>
+    <a class="botao claro" href="{{ voltar }}">Não, voltar</a>
+  </form>
+</div>
+{% endblock %}

@@ -21,6 +21,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from . import boleto as boletos_servico
+from . import importacao
 from . import servicos
 from .cadastros import INICIO_DO_MODULO
 from .forms import EmailForm, MensalidadesForm, NovaLojaForm, PersonalizarForm, QuitarForm
@@ -164,6 +165,58 @@ def emails(request):
     return render(request, "gestao/emails.html", {
         "form": form, "modulo": "secretaria", "enviados": EmailEnviado.objects.filter(loja=loja)[:30],
         "modo_teste": not settings.EMAIL_ENVIADO_DE_VERDADE})
+
+
+@exige("secretaria")
+def importar_irmaos(request):
+    """Importa o cadastro de Irmãos de uma planilha do Excel: envia, confere na tela e só então grava."""
+    loja, analise = request.loja, None
+    guardada = request.session.get("importacao")
+    if guardada and guardada.get("loja") != loja.pk:
+        guardada = None
+    if request.method == "POST":
+        acao = request.POST.get("acao")
+        if acao == "cancelar":
+            request.session.pop("importacao", None)
+            return redirect("importar_irmaos")
+        if acao == "gravar":
+            if not guardada:
+                messages.error(request, "A conferência expirou. Envie a planilha de novo.")
+                return redirect("importar_irmaos")
+            criados, atualizados = importacao.gravar(loja, guardada["analise"])
+            request.session.pop("importacao", None)
+            messages.success(request, f"Importação concluída: {criados} Irmão(s) incluído(s) e {atualizados} atualizado(s).")
+            return redirect("irmaos_lista")
+        arquivo = request.FILES.get("arquivo")
+        if not arquivo:
+            messages.error(request, "Escolha a planilha antes de enviar.")
+        elif not arquivo.name.lower().endswith(".xlsx"):
+            messages.error(request, "Envie um arquivo do Excel com final .xlsx. Se a sua planilha é .xls ou .csv, "
+                                    "abra no Excel e use Arquivo › Salvar como › Pasta de Trabalho do Excel (.xlsx).")
+        elif arquivo.size > importacao.MAX_BYTES:
+            messages.error(request, "A planilha passa de 5 MB. Remova imagens ou divida em arquivos menores.")
+        else:
+            try:
+                analise = importacao.analisar(loja, arquivo)
+            except importacao.ErroDePlanilha as erro:
+                messages.error(request, str(erro))
+            else:
+                request.session["importacao"] = {"loja": loja.pk, "arquivo": arquivo.name[:120], "analise": analise}
+                return redirect("importar_irmaos")
+    if guardada:
+        analise = guardada["analise"]
+    return render(request, "gestao/importar.html", {
+        "modulo": "secretaria", "analise": analise, "arquivo_nome": guardada and guardada.get("arquivo"),
+        "amostra": analise and [{**r, "nascimento": "/".join(reversed(r["dados"]["data_nascimento"].split("-")))
+                                 if r["dados"].get("data_nascimento") else ""} for r in analise["registros"][:15]]})
+
+
+@exige("secretaria")
+def importar_modelo(request):
+    resposta = HttpResponse(importacao.planilha_modelo(request.loja),
+                            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    resposta["Content-Disposition"] = 'attachment; filename="modelo-cadastro-irmaos.xlsx"'
+    return resposta
 
 
 # =============================================================================

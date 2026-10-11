@@ -13,6 +13,7 @@ Recurso("irmaos", Irmao, "secretaria", form=IrmaoForm, relacionados=("grau",),
                  ("Celular", "celular"), ("E-mail", "email")],
         busca=("nome", "cim", "cpf", "email"), filtros=("situacao", "grau"),
         acoes=[("Ficha", "irmao_ficha")], classe_linha=lambda i: "" if i.no_quadro else "apagado",
+        acoes_topo=[("Importar do Excel", "importar_irmaos")],
         ajuda="O grau é atualizado pelo Controle de Graus (abra a ficha do Irmão).")
 
 Recurso("dependentes", Dependente, "secretaria", relacionados=("irmao",),
@@ -164,7 +165,7 @@ MENUS = {
     "secretaria": [("Irmãos", "irmaos_lista"), ("Dependentes", "dependentes_lista"),
                    ("Controle de graus", "graus-historico_lista"), ("Lojas co-Irmãs", "coirmas_lista"),
                    ("Atas", "atas_lista"), ("Informativos", "informativos_lista"), ("Agenda", "eventos_lista"),
-                   ("E-mails", "emails")],
+                   ("E-mails", "emails"), ("Importar planilha", "importar_irmaos")],
     "tesouraria": [("A receber", "receber_lista"), ("A pagar", "pagar_lista"),
                    ("Mensalidades em série", "mensalidades_serie"), ("Boletos", "boletos"),
                    ("Transferências", "transferencias_lista"), ("Contas e caixas", "contas_lista"),

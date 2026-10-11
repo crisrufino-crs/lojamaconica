@@ -707,4 +707,93 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 11/10/2026-D")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 11/10/2026-E")
+
+
+def importacao_colunas():
+    from .importacao import COLUNAS
+    return COLUNAS
+
+
+class ImportarPlanilha(Base):
+    def _xlsx(self, linhas, antes=()):
+        import io
+        from openpyxl import Workbook
+        pasta = Workbook()
+        for linha in [*antes, *linhas]:
+            pasta.active.append(linha)
+        saida = io.BytesIO()
+        pasta.save(saida)
+        return SimpleUploadedFile("cadastro.xlsx", saida.getvalue())
+
+    def _enviar(self, linhas, **k):
+        return self.client.post(reverse("importar_irmaos"), {"arquivo": self._xlsx(linhas, **k)}, follow=True)
+
+    def test_importa_confere_antes_e_grava_so_na_confirmacao(self):
+        from datetime import datetime
+        self.entrar(self.secretario)
+        extra = CampoExtra.objects.create(loja=self.loja, rotulo="Padrinho")
+        pagina = self._enviar([
+            ["NOME", "Nº CIM", "Dt. Nascimento", "cpf", "E-mail", "Estado", "Grau", "Iniciação", "Exaltação", "Esposa",
+             "Padrinho", "Time de futebol", "Situação", "CEP"],
+            ["José Novo da Silva", 4455, datetime(1975, 3, 25), 1234567809, "JOSE@Exemplo.com.br", "São Paulo", "Mestre",
+             "14/05/2010", "03/08/2012", "Maria Novo", "Irmão 0", "Santos", "regular", 1000000],
+            ["Irmão 1", None, "20/05/1971", None, None, "RJ", None, None, None, None, None, None, None, None],
+            ["Linha Ruim", None, "31/02/1980", None, "sem-arroba", None, "Grau 33", None, None, None, None, None, None, None],
+            [None, 99, None, None, None, None, None, None, None, None, None, None, None, None],
+            ["José Novo da Silva", 4455, None, None, None, None, None, None, None, None, None, None, None, None],
+        ], antes=[["Cadastro geral da Loja"], [None]])
+        self.assertContains(pagina, "Time de futebol")  # coluna ignorada é avisada
+        self.assertContains(pagina, "não reconhecida")
+        self.assertContains(pagina, "repetido na planilha")
+        analise = self.client.session["importacao"]["analise"]
+        self.assertEqual((analise["novos"], analise["atualizados"], len(analise["erros"])), (1, 1, 3))
+        self.assertFalse(Irmao.objects.filter(nome="José Novo da Silva").exists())  # ainda não gravou nada
+        self.client.post(reverse("importar_irmaos"), {"acao": "gravar"})
+        novo = Irmao.objects.get(nome="José Novo da Silva")
+        self.assertEqual((novo.loja, novo.cim, novo.cpf, novo.email, novo.uf, novo.cep, novo.situacao),
+                         (self.loja, "4455", "012.345.678-09", "jose@exemplo.com.br", "SP", "01000-000", "ativo"))
+        self.assertEqual((novo.data_nascimento, novo.data_iniciacao), (date(1975, 3, 25), date(2010, 5, 14)))
+        self.assertEqual(novo.grau, self.graus["Mestre"])
+        self.assertEqual(sorted(novo.graus.values_list("grau__nome", "data")),
+                         [("Aprendiz", date(2010, 5, 14)), ("Mestre", date(2012, 8, 3))])
+        self.assertEqual(novo.dependentes.get().nome, "Maria Novo")
+        self.assertEqual(novo.extras, {str(extra.pk): "Irmão 0"})
+        existente = Irmao.objects.get(pk=self.irmaos[1].pk)
+        self.assertEqual((existente.data_nascimento, existente.uf, existente.email),
+                         (date(1971, 5, 20), "RJ", "i1@exemplo.com.br"))  # atualizou; célula vazia não apagou o e-mail
+        self.assertEqual(Irmao.objects.filter(loja=self.loja).count(), 5)
+        self.assertFalse(Irmao.objects.filter(nome="Linha Ruim").exists())
+        self.assertNotIn("importacao", self.client.session)
+        # enviar a mesma planilha de novo não duplica ninguém
+        self._enviar([["Nome", "CIM"], ["José Novo da Silva", 4455]])
+        self.client.post(reverse("importar_irmaos"), {"acao": "gravar"})
+        self.assertEqual(Irmao.objects.filter(loja=self.loja).count(), 5)
+
+    def test_arquivos_invalidos_modelo_e_acessos(self):
+        self.entrar(self.secretario)
+        r = self.client.post(reverse("importar_irmaos"), {"arquivo": SimpleUploadedFile("x.xlsx", b"nao e excel")}, follow=True)
+        self.assertContains(r, "Não consegui abrir o arquivo")
+        r = self.client.post(reverse("importar_irmaos"), {"arquivo": SimpleUploadedFile("x.csv", b"a;b")}, follow=True)
+        self.assertContains(r, ".xlsx")
+        self.assertContains(self._enviar([["Coluna A", "Coluna B"], ["x", "y"]]), "Não encontrei a linha de títulos")
+        self.assertContains(self.client.post(reverse("importar_irmaos"), {"acao": "gravar"}, follow=True), "expirou")
+        # a planilha modelo é reconhecida por inteiro, e a linha de exemplo dela nunca é importada
+        modelo = self.client.get(reverse("importar_modelo"))
+        self.assertIn("spreadsheetml", modelo["Content-Type"])
+        r = self.client.post(reverse("importar_irmaos"), {"arquivo": SimpleUploadedFile("modelo.xlsx", modelo.content)}, follow=True)
+        analise = self.client.session["importacao"]["analise"]
+        self.assertEqual((analise["novos"], analise["erros"], analise["ignoradas"]), (0, [], []))
+        self.assertEqual(len(analise["colunas"]), len(importacao_colunas()))
+        self.client.post(reverse("importar_irmaos"), {"acao": "cancelar"})
+        self.assertNotIn("importacao", self.client.session)
+        # só a Secretaria importa, e a conferência de uma Loja não vale em outra
+        self.entrar(self.tesoureiro)
+        self.assertEqual(self.client.get(reverse("importar_irmaos")).status_code, 403)
+        self.entrar(self.secretario)
+        self._enviar([["Nome"], ["Só da Loja A"]])
+        sessao = self.client.session
+        sessao["importacao"] = {**sessao["importacao"], "loja": self.outra.pk}
+        sessao.save()
+        self.client.post(reverse("importar_irmaos"), {"acao": "gravar"})
+        self.assertFalse(Irmao.objects.filter(nome="Só da Loja A").exists())

@@ -4,3 +4,4 @@ cryptography>=42
 whitenoise>=6
 gunicorn>=22
 psycopg[binary]>=3.1
+openpyxl>=3.1

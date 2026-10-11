@@ -49,6 +49,12 @@ Em Administração › Usuários e acessos, ao incluir ou alterar um usuário, o
 **Senha** e deixa marcado **Enviar esta senha para o e-mail cadastrado**. A pessoa recebe login e senha por
 e-mail e o sistema a obriga a trocar a senha no primeiro acesso. Precisa do servidor de e-mail configurado.
 
+## Importar Irmãos do Excel
+
+Em Secretaria › Importar planilha: baixe a planilha modelo, preencha (uma linha por Irmão) e envie o arquivo .xlsx.
+O sistema mostra uma conferência (quantos serão incluídos, atualizados e recusados, com o motivo) e só grava
+depois da confirmação. Irmão que já existe (mesmo CIM, CPF ou nome) é atualizado, não duplicado.
+
 ## O que já funciona e o que depende de contratar/configurar
 
 | Recurso | Situação |

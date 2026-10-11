@@ -1,0 +1,42 @@
+{% extends "gestao/base.html" %}{% load gestao_tags %}
+{% block titulo %}Importar planilha{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><div><h1>Importar Irmãos do Excel</h1><p class="suave">Envie a planilha, confira o resultado na tela e só então grave. Nada é alterado antes da sua confirmação.</p></div>
+  <div class="acoes"><a class="botao claro" href="{% url 'importar_modelo' %}">Baixar planilha modelo</a></div></div>
+{% if not analise %}
+<form method="post" enctype="multipart/form-data" class="card">{% csrf_token %}
+  <h2>1. Escolha a planilha</h2>
+  <div class="campo" style="max-width:520px"><label for="arquivo">Arquivo do Excel (.xlsx)</label><input type="file" name="arquivo" id="arquivo" accept=".xlsx" required></div>
+  <div class="rodape-form"><button class="botao">Enviar e conferir</button></div>
+</form>
+<section class="card"><h2>Como a planilha deve ser</h2>
+  <p>Uma linha por Irmão, com os títulos na primeira linha. Só a coluna <b>Nome</b> é obrigatória. O sistema reconhece os títulos mesmo com pequenas diferenças (“Nascimento”, “Data de nascimento”, “Dt. Nascimento”).</p>
+  <p><b>Colunas aceitas:</b> Nome completo, CIM, Situação, Grau, Cargo, Data de nascimento, CPF, RG, E-mail, Celular, Telefone, Endereço, Bairro, Cidade, UF, CEP, Naturalidade, Profissão, Estado civil, Nome do pai, Nome da mãe, Data de iniciação, Data de elevação, Data de exaltação, Data de instalação, Data de filiação à Loja, Cônjuge, Nascimento do cônjuge, Observações e os campos personalizados da Loja.</p>
+  <p class="ajuda">Se o Irmão já existir (mesmo CIM, CPF ou nome), o cadastro é atualizado em vez de duplicado. Célula vazia nunca apaga um dado que já está no sistema.</p>
+</section>
+{% else %}
+<div class="grade">
+  <div class="card cartao-numero"><div class="rotulo">Serão incluídos</div><div class="valor">{{ analise.novos }}</div><div class="nota">Irmãos novos</div></div>
+  <div class="card cartao-numero"><div class="rotulo">Serão atualizados</div><div class="valor">{{ analise.atualizados }}</div><div class="nota">já existem no cadastro</div></div>
+  <div class="card cartao-numero"><div class="rotulo">Linhas recusadas</div><div class="valor">{{ analise.erros|length }}</div><div class="nota">ficam de fora; veja o motivo abaixo</div></div>
+</div>
+<section class="card"><h2>2. Confira: {{ arquivo_nome }}</h2>
+  <p><b>Colunas reconhecidas:</b> {% for original, destino in analise.colunas %}{{ original }}{% if original != destino %} → {{ destino }}{% endif %}{% if not forloop.last %}; {% endif %}{% endfor %}.</p>
+  {% if analise.ignoradas %}<div class="nota-aviso"><b>Colunas ignoradas</b> (o sistema não tem onde guardar): {{ analise.ignoradas|join:"; " }}. Para aproveitá-las, crie um campo com o mesmo nome em Administração › Campos personalizados e envie a planilha de novo.</div>{% endif %}
+  <form method="post" class="rodape-form" style="margin-top:8px">{% csrf_token %}
+    <button class="botao" name="acao" value="gravar"{% if not analise.registros %} disabled{% endif %}>Gravar {{ analise.registros|length }} Irmão(s)</button>
+    <button class="botao claro" name="acao" value="cancelar">Cancelar e enviar outra planilha</button>
+  </form>
+</section>
+{% if analise.erros %}<h2 style="margin-top:32px">Linhas recusadas</h2>
+<div class="card justo"><div class="rolagem"><table><thead><tr><th>Linha do Excel</th><th>Nome</th><th>Motivo</th></tr></thead><tbody>
+  {% for e in analise.erros %}<tr class="atrasado"><td>{{ e.linha }}</td><td>{{ e.nome|default:"—" }}</td><td>{{ e.problemas|join:"; " }}</td></tr>{% endfor %}
+</tbody></table></div></div>
+<p class="ajuda">Corrija essas linhas na planilha e envie de novo, ou grave assim mesmo: elas simplesmente ficam de fora.</p>{% endif %}
+{% if amostra %}<h2 style="margin-top:32px">Amostra do que será gravado{% if analise.registros|length > 15 %} (15 primeiros){% endif %}</h2>
+<div class="card justo"><div class="rolagem"><table><thead><tr><th>Linha</th><th>Nome</th><th>CIM</th><th>Nascimento</th><th>E-mail</th><th>Celular</th><th>O que acontece</th></tr></thead><tbody>
+  {% for r in amostra %}<tr><td>{{ r.linha }}</td><td>{{ r.dados.nome }}</td><td>{{ r.dados.cim|default:"—" }}</td><td>{{ r.nascimento|default:"—" }}</td><td>{{ r.dados.email|default:"—" }}</td><td>{{ r.dados.celular|default:"—" }}</td>
+    <td>{% if r.pk %}{% selo "atualiza" "atencao" %}{% else %}{% selo "inclui" "ok" %}{% endif %}</td></tr>{% endfor %}
+</tbody></table></div></div>{% endif %}
+{% endif %}
+{% endblock %}

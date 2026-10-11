@@ -1,5 +1,6 @@
 from django.conf import settings
 
+from . import VERSAO
 from .permissoes import MODULOS
 
 
@@ -15,7 +16,7 @@ def _texto_sobre(cor):
 def sistema(request):
     usuario = getattr(request, "user", None)
     loja = getattr(request, "loja", None)
-    dados = {"modulo": "", "loja": loja, "MODULOS": MODULOS, "modulos_do_usuario": [], "nao_lidas": 0,
+    dados = {"VERSAO": VERSAO, "modulo": "", "loja": loja, "MODULOS": MODULOS, "modulos_do_usuario": [], "nao_lidas": 0,
              "push_chave_publica": settings.PUSH_CHAVE_PUBLICA,
              "cor_primaria": loja.cor_primaria if loja else "#1F3A5F",
              "cor_destaque": loja.cor_destaque if loja else "#B8860B"}

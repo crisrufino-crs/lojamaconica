@@ -21,7 +21,9 @@ class Command(BaseCommand):
         if not (admin.is_superuser and admin.is_active and admin.loja_id is None and admin.username == ADMIN_LOGIN):
             admin.username, admin.is_superuser, admin.is_staff, admin.is_active, admin.loja = ADMIN_LOGIN, True, True, True, None
             mudou.append("acesso liberado")
-        if opcoes["redefinir"] or not admin.has_usable_password():
+        # Enquanto o Administrador nunca tiver conseguido entrar, a senha original é restaurada a cada instalação.
+        # Depois do primeiro acesso, a senha passa a ser só dele e a instalação não mexe mais nela.
+        if opcoes["redefinir"] or not admin.has_usable_password() or admin.last_login is None:
             admin.password, admin.deve_trocar_senha = ADMIN_SENHA_HASH, False
             mudou.append("senha original restaurada")
         admin.save()

@@ -681,6 +681,7 @@ class GarantirAdministrador(TestCase):
         self.assertEqual((admin.username, admin.password, admin.is_superuser), (ADMIN_LOGIN, ADMIN_SENHA_HASH, True))
         admin.set_password("outra-senha-minha-55")
         admin.is_superuser = False
+        admin.last_login = timezone.now()
         admin.save()
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
@@ -688,3 +689,22 @@ class GarantirAdministrador(TestCase):
         self.assertEqual(Usuario.objects.count(), 1)
         call_command("garantir_admin", "--redefinir", stdout=StringIO())
         self.assertEqual(Usuario.objects.get().password, ADMIN_SENHA_HASH)
+
+
+class AdministradorQueNuncaEntrou(TestCase):
+    def test_senha_errada_e_corrigida_ate_o_primeiro_acesso(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from django.utils import timezone as tz
+        from .acesso_admin import ADMIN_LOGIN, ADMIN_SENHA_HASH
+        admin = Usuario.objects.create_superuser(ADMIN_LOGIN, "", "senha-antiga-errada-1")
+        call_command("garantir_admin", stdout=StringIO())
+        admin.refresh_from_db()
+        self.assertEqual(admin.password, ADMIN_SENHA_HASH)  # nunca entrou: volta para a senha original
+        admin.set_password("troquei-a-minha-senha-9")
+        admin.last_login = tz.now()
+        admin.save()
+        call_command("garantir_admin", stdout=StringIO())
+        admin.refresh_from_db()
+        self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 11/10/2026-D")

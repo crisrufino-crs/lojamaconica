@@ -708,7 +708,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 11/10/2026-F")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 11/10/2026-G")
 
 
 def importacao_colunas():
@@ -841,5 +841,73 @@ class ExcluirVarios(Base):
         self.assertFalse(Irmao.objects.filter(loja=self.loja).exists())
         self.assertFalse(Lancamento.objects.exists() or Boleto.objects.filter(pk=b.pk).exists())
         self.assertContains(self.client.get(reverse("irmaos_lista")), "Ainda não há nada aqui")
+        self.entrar(self.tesoureiro)
+        self.assertEqual(self.client.post(url, {"todos": "1"}).status_code, 403)
+
+
+class ExcluirVariosNosModulos(Base):
+    def test_toda_lista_de_modulo_tem_selecao_menos_a_de_usuarios(self):
+        self.entrar(self.master)
+        for slug, recurso in RECURSOS.items():
+            tem = recurso.selecao is not None
+            self.assertEqual(tem, recurso.modulo != "admin", slug)
+        self.receber()
+        self.assertContains(self.client.get(reverse("receber_lista")), 'id="excluir-selecionados"')
+        self.assertNotContains(self.client.get(reverse("usuarios_lista")), 'id="excluir-selecionados"')
+        with self.assertRaises(Exception):
+            reverse("usuarios_excluir_varios")
+
+    def test_tesouraria_exclui_lancamentos_com_aviso_palavra_e_sem_tocar_outra_loja(self):
+        url = reverse("receber_excluir_varios")
+        aberto, pago, a_pagar = self.receber(), self.receber(valor="50"), None
+        servicos.quitar(pago, self.hoje, D("50"), self.caixa)
+        a_pagar = Lancamento.objects.create(loja=self.loja, tipo="P", descricao="Luz", favorecido="Cia", plano=self.plano["2.3"],
+                                            valor=D("40"), vencimento=self.hoje)
+        plano_b = PlanoConta.objects.filter(loja=self.outra, codigo="1.1").get()
+        alheio = Lancamento.objects.create(loja=self.outra, tipo="R", descricao="De outra Loja", favorecido="X", plano=plano_b,
+                                           valor=D("10"), vencimento=self.hoje)
+        ids = [aberto.pk, pago.pk, a_pagar.pk, alheio.pk]
+        self.entrar(self.secretario)
+        self.assertEqual(self.client.post(url, {"ids": ids}).status_code, 403)
+        self.entrar(self.tesoureiro)
+        pagina = self.client.post(url, {"ids": ids})
+        self.assertContains(pagina, "Excluir 2 registro(s)")  # só os "a receber" desta Loja
+        self.assertContains(pagina, "1 já estão quitados")
+        self.client.post(url, {"ids": ids, "confirmar": "1", "palavra": "nao"})
+        self.assertEqual(Lancamento.objects.count(), 4)
+        self.assertEqual(servicos.saldo_conta(self.caixa), D("50"))
+        self.client.post(url, {"ids": ids, "confirmar": "1", "palavra": "EXCLUIR"})
+        self.assertEqual(sorted(Lancamento.objects.values_list("descricao", flat=True)), ["De outra Loja", "Luz"])
+        self.assertEqual(servicos.saldo_conta(self.caixa), D("0"))
+        self.assertRedirects(self.client.get(url), reverse("receber_lista"))
+
+    def test_plano_de_contas_apaga_o_que_pode_e_mantem_o_que_esta_em_uso(self):
+        self.receber()  # usa a conta 1.1
+        self.entrar(self.tesoureiro)
+        antes = PlanoConta.objects.filter(loja=self.loja).count()
+        self.client.post(reverse("plano-contas_excluir_varios"), {"todos": "1", "confirmar": "0"})
+        ids = list(PlanoConta.objects.filter(loja=self.loja).values_list("pk", flat=True))
+        resposta = self.client.post(reverse("plano-contas_excluir_varios"), {"ids": ids, "confirmar": "1", "palavra": "EXCLUIR"}, follow=True)
+        self.assertContains(resposta, "foram mantidos")
+        # sobram só a conta em uso (1.1) e a conta que a agrupa (1); filhas são apagadas antes das mães
+        self.assertEqual(sorted(PlanoConta.objects.filter(loja=self.loja).values_list("codigo", flat=True)), ["1", "1.1"])
+        self.assertEqual(PlanoConta.objects.filter(loja=self.outra).count(), antes)
+
+    def test_chancelaria_exclui_sessoes_com_as_presencas(self):
+        sessoes = [Sessao.objects.create(loja=self.loja, data=self.hoje - timedelta(days=7 * n)) for n in range(3)]
+        for s in sessoes:
+            servicos.sincronizar_presencas(s)
+        Licenca.objects.create(loja=self.loja, irmao=self.irmaos[0], inicio=self.hoje, fim=self.hoje)
+        self.entrar(self.chanceler)
+        url = reverse("sessoes_excluir_varios")
+        pagina = self.client.post(url, {"todos": "1"})
+        self.assertContains(pagina, "Excluir 3 registro(s)")
+        self.assertContains(pagina, "12 marcações de presença")
+        self.client.post(url, {"ids": [sessoes[0].pk, sessoes[1].pk], "confirmar": "1", "palavra": "excluir"})
+        self.assertEqual((Sessao.objects.count(), Presenca.objects.count()), (1, 4))
+        self.client.post(reverse("licencas_excluir_varios"), {"todos": "1", "confirmar": "0"})
+        self.client.post(reverse("licencas_excluir_varios"), {"ids": list(Licenca.objects.values_list("pk", flat=True)),
+                                                              "confirmar": "1", "palavra": "EXCLUIR"})
+        self.assertFalse(Licenca.objects.exists())
         self.entrar(self.tesoureiro)
         self.assertEqual(self.client.post(url, {"todos": "1"}).status_code, 403)

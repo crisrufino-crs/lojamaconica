@@ -207,7 +207,11 @@ def irmaos_excluir_varios(request):
                 messages.error(request, f"{mantidos} Irmão(s) não foram excluídos porque têm lançamentos na Tesouraria.")
             return redirect("irmaos_lista")
     return render(request, "gestao/excluir_varios.html", {
-        "modulo": "secretaria", "total": total, "amostra": escolhidos[:12], "ids": list(escolhidos.values_list("pk", flat=True)),
+        "titulo": f"Excluir {total} Irmão(s)?", "acao": reverse("irmaos_excluir_varios"), "voltar": reverse("irmaos_lista"),
+        "descricao": "Junto com cada Irmão são apagados os dependentes, o histórico de graus, as presenças, as licenças e os "
+                     "certificados de visita dele. O usuário de acesso continua existindo, mas deixa de estar ligado ao cadastro.",
+        "modulo": "secretaria", "total": total, "amostra": [i.nome for i in escolhidos[:12]],
+        "ids": list(escolhidos.values_list("pk", flat=True)),
         "com_financeiro": com_financeiro, "pode_financeiro": pode_financeiro, "erro": erro,
         "financeiro_marcado": request.POST.get("financeiro") == "1"})
 

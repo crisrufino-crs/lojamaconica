@@ -63,6 +63,23 @@ COLUNAS_LANCAMENTO = [("Vencimento", "vencimento"), ("Descrição", "descricao")
                       ("Plano", "plano"), ("Valor", "valor"), ("Situação", "status"), ("Quitado em", "data_pagamento")]
 
 
+def _aviso_lancamentos(consulta):
+    quitados, boletos = consulta.filter(status="pago").count(), consulta.filter(boleto__isnull=False).count()
+    partes = []
+    if quitados:
+        partes.append(f"{quitados} já estão quitados: ao excluí-los, os saldos das contas e os relatórios financeiros mudam")
+    if boletos:
+        partes.append(f"{boletos} têm boleto emitido, que é apagado junto")
+    return "; ".join(partes) + ("." if partes else "")
+
+
+def _aviso_sessoes(consulta):
+    from .models import Presenca
+    presencas = Presenca.objects.filter(sessao__in=consulta).count()
+    return (f"As {presencas} marcações de presença dessas sessões são apagadas junto, e a frequência dos Irmãos é recalculada."
+            if presencas else "")
+
+
 def _classe_lancamento(l):
     return "atrasado" if l.vencido else ("apagado" if l.status == "cancelado" else "")
 
@@ -70,12 +87,12 @@ def _classe_lancamento(l):
 Recurso("receber", Lancamento, "tesouraria", titulo="Contas a receber", form=ReceberForm, fixos={"tipo": "R"},
         relacionados=("irmao", "plano"), colunas=COLUNAS_LANCAMENTO, busca=("descricao", "irmao__nome", "favorecido"),
         filtros=("status", "irmao", "plano"), acoes=ACOES_LANCAMENTO, classe_linha=_classe_lancamento,
-        acoes_topo=[("Mensalidades em série", "mensalidades_serie")])
+        acoes_topo=[("Mensalidades em série", "mensalidades_serie")], aviso_exclusao=_aviso_lancamentos)
 
 Recurso("pagar", Lancamento, "tesouraria", titulo="Contas a pagar", form=PagarForm, fixos={"tipo": "P"},
         relacionados=("irmao", "plano"), colunas=COLUNAS_LANCAMENTO, busca=("descricao", "irmao__nome", "favorecido"),
         filtros=("status", "plano"), acoes=[a for a in ACOES_LANCAMENTO if a[0] != "Boleto"],
-        classe_linha=_classe_lancamento)
+        classe_linha=_classe_lancamento, aviso_exclusao=_aviso_lancamentos)
 
 Recurso("plano-contas", PlanoConta, "tesouraria", form=PlanoContaForm, relacionados=("pai",),
         colunas=[("Código", "codigo"), ("Conta", lambda p: " " * p.nivel + p.nome), ("Tipo", "tipo"),
@@ -99,7 +116,7 @@ Recurso("sessoes", Sessao, "chancelaria", relacionados=("grau",), campos=["data"
         colunas=[("Data", "data"), ("Tipo", "tipo"), ("Grau", "grau"), ("Descrição", "descricao"),
                  ("Presentes", lambda s: f"{s.presencas.filter(status='P').count()} de {s.presencas.exclude(status='L').count()}")],
         filtros=("tipo",), acoes=[("Registrar presença", "sessao_presenca")],
-        apos_salvar=lambda obj, novo, request: servicos.sincronizar_presencas(obj),
+        apos_salvar=lambda obj, novo, request: servicos.sincronizar_presencas(obj), aviso_exclusao=_aviso_sessoes,
         ajuda="Ao criar a sessão, a lista de chamada é montada sozinha com os Irmãos do quadro.")
 
 Recurso("licencas", Licenca, "chancelaria", form=LicencaForm, relacionados=("irmao",),

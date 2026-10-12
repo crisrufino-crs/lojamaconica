@@ -45,6 +45,7 @@ urlpatterns = [
     path("secretaria/irmaos/<int:pk>/ficha/", views.irmao_ficha, name="irmao_ficha"),
     path("secretaria/atas/<int:pk>/abrir/", views.ata_ver, name="ata_ver"),
     path("secretaria/emails/", views.emails, name="emails"),
+    path("secretaria/irmaos/excluir-selecionados/", views.irmaos_excluir_varios, name="irmaos_excluir_varios"),
     path("secretaria/importar/", views.importar_irmaos, name="importar_irmaos"),
     path("secretaria/importar/modelo/", views.importar_modelo, name="importar_modelo"),
     path("chancelaria/sessoes/<int:pk>/presenca/", views.sessao_presenca, name="sessao_presenca"),

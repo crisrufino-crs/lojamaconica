@@ -168,6 +168,51 @@ def emails(request):
 
 
 @exige("secretaria")
+@require_POST
+def irmaos_excluir_varios(request):
+    """Exclusão em lote: recebe os Irmãos marcados na lista, mostra a conferência e só exclui com a palavra EXCLUIR."""
+    from .crud import RECURSOS
+    loja, recurso = request.loja, RECURSOS["irmaos"]
+    if request.POST.get("todos") == "1" and "confirmar" not in request.POST:
+        escolhidos = recurso.filtrada(request, request.POST)[0]
+    else:
+        ids = [int(i) for i in request.POST.getlist("ids") if i.isdigit()]
+        escolhidos = Irmao.objects.filter(loja=loja, pk__in=ids)
+    escolhidos = escolhidos.order_by("nome")
+    total = escolhidos.count()
+    if not total:
+        messages.error(request, "Nenhum Irmão foi selecionado.")
+        return redirect("irmaos_lista")
+    com_financeiro = escolhidos.filter(lancamentos__isnull=False).distinct().count()
+    pode_financeiro = request.user.pode("tesouraria")
+    erro = ""
+    if "confirmar" in request.POST:
+        if request.POST.get("palavra", "").strip().upper() != "EXCLUIR":
+            erro = "Para confirmar, digite a palavra EXCLUIR no campo."
+        else:
+            apagar_financeiro = pode_financeiro and request.POST.get("financeiro") == "1"
+            excluidos = mantidos = 0
+            with transaction.atomic():
+                for irmao in escolhidos:
+                    if irmao.lancamentos.exists():
+                        if not apagar_financeiro:
+                            mantidos += 1
+                            continue
+                        irmao.lancamentos.all().delete()  # leva junto os boletos desses lançamentos
+                    irmao.delete()
+                    excluidos += 1
+            if excluidos:
+                messages.success(request, f"{excluidos} Irmão(s) excluído(s), com seus dependentes, graus e presenças.")
+            if mantidos:
+                messages.error(request, f"{mantidos} Irmão(s) não foram excluídos porque têm lançamentos na Tesouraria.")
+            return redirect("irmaos_lista")
+    return render(request, "gestao/excluir_varios.html", {
+        "modulo": "secretaria", "total": total, "amostra": escolhidos[:12], "ids": list(escolhidos.values_list("pk", flat=True)),
+        "com_financeiro": com_financeiro, "pode_financeiro": pode_financeiro, "erro": erro,
+        "financeiro_marcado": request.POST.get("financeiro") == "1"})
+
+
+@exige("secretaria")
 def importar_irmaos(request):
     """Importa o cadastro de Irmãos de uma planilha do Excel: envia, confere na tela e só então grava."""
     loja, analise = request.loja, None

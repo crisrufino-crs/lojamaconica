@@ -525,8 +525,9 @@ class AvisosAutomaticos(Base):
     def test_rotina_diaria_aniversario_e_lembrete_sem_repetir(self):
         Irmao.objects.filter(pk=self.irmaos[1].pk).update(data_nascimento=date(1980, self.hoje.month, self.hoje.day))
         Sessao.objects.create(loja=self.loja, data=self.hoje, tipo="magna")
-        agora = timezone.now()
-        Evento.objects.create(loja=self.loja, titulo="Jantar", inicio=agora.replace(hour=23, minute=0), local="Salão")
+        from datetime import datetime, time
+        agora = timezone.make_aware(datetime.combine(self.hoje, time(12, 0)))  # meio-dia de hoje, no horário local
+        Evento.objects.create(loja=self.loja, titulo="Jantar", inicio=agora, local="Salão")
         Evento.objects.create(loja=self.loja, titulo="Semana que vem", inicio=agora + timedelta(days=7))
         resumo = servicos.rotina_diaria(self.loja)
         self.assertEqual(resumo, "1 aniversariante(s), 1 e-mail(s), 2 lembrete(s)")
@@ -707,7 +708,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 11/10/2026-E")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 11/10/2026-F")
 
 
 def importacao_colunas():
@@ -797,3 +798,48 @@ class ImportarPlanilha(Base):
         sessao.save()
         self.client.post(reverse("importar_irmaos"), {"acao": "gravar"})
         self.assertFalse(Irmao.objects.filter(nome="Só da Loja A").exists())
+
+
+class ExcluirVarios(Base):
+    def test_exclui_selecionados_so_com_a_palavra_e_respeita_tesouraria_e_loja(self):
+        url = reverse("irmaos_excluir_varios")
+        self.receber(self.irmaos[1])  # Irmão 1 tem lançamento na Tesouraria
+        from .models import Dependente
+        Dependente.objects.create(loja=self.loja, irmao=self.irmaos[0], nome="Dependente X")
+        self.entrar(self.secretario)
+        self.assertEqual(self.client.get(url).status_code, 405)  # só por envio da tela, nunca por link
+        ids = [self.irmaos[0].pk, self.irmaos[1].pk, self.alheio.pk]
+        pagina = self.client.post(url, {"ids": ids})
+        self.assertContains(pagina, "2 Irmão(s)")  # o de outra Loja nem entra na conta
+        self.assertNotContains(pagina, "Irmão de outra Loja")
+        self.assertNotContains(pagina, 'name="financeiro"')  # Secretaria sozinha não apaga financeiro
+        self.assertEqual(Irmao.objects.filter(loja=self.loja).count(), 4)
+        self.assertContains(self.client.post(url, {"ids": ids, "confirmar": "1", "palavra": "sim"}), "digite a palavra EXCLUIR")
+        self.assertEqual(Irmao.objects.filter(loja=self.loja).count(), 4)
+        self.client.post(url, {"ids": ids, "confirmar": "1", "palavra": "excluir", "financeiro": "1"})
+        self.assertEqual(sorted(Irmao.objects.filter(loja=self.loja).values_list("nome", flat=True)), ["Irmão 1", "Irmão 2", "Irmão 3"])
+        self.assertFalse(Dependente.objects.exists())
+        self.assertTrue(Irmao.objects.filter(pk=self.alheio.pk).exists())
+        self.assertEqual(Lancamento.objects.count(), 1)
+
+    def test_master_exclui_todos_inclusive_financeiro_e_filtro_vale_para_todas_as_paginas(self):
+        url = reverse("irmaos_excluir_varios")
+        b = boleto.emitir(self.receber(self.irmaos[1]), self.banco)
+        Irmao.objects.filter(pk=self.irmaos[3].pk).update(situacao="desligado")
+        self.entrar(self.master)
+        pagina = self.client.post(url, {"todos": "1", "situacao": "desligado"})
+        self.assertContains(pagina, "1 Irmão(s)")  # "todos" respeita o filtro que estava na tela
+        pagina = self.client.post(url, {"todos": "1"})
+        self.assertContains(pagina, "4 Irmão(s)")
+        self.assertContains(pagina, 'name="financeiro"')
+        ids = [i.pk for i in self.irmaos]
+        self.client.post(url, {"ids": ids, "confirmar": "1", "palavra": "EXCLUIR"})  # sem marcar o financeiro
+        self.assertEqual(list(Irmao.objects.filter(loja=self.loja).values_list("nome", flat=True)), ["Irmão 1"])
+        self.master.refresh_from_db()
+        self.assertTrue(self.master.is_active and self.master.irmao is None)  # o usuário continua, só perde a ligação
+        self.client.post(url, {"ids": ids, "confirmar": "1", "palavra": "EXCLUIR", "financeiro": "1"})
+        self.assertFalse(Irmao.objects.filter(loja=self.loja).exists())
+        self.assertFalse(Lancamento.objects.exists() or Boleto.objects.filter(pk=b.pk).exists())
+        self.assertContains(self.client.get(reverse("irmaos_lista")), "Ainda não há nada aqui")
+        self.entrar(self.tesoureiro)
+        self.assertEqual(self.client.post(url, {"todos": "1"}).status_code, 403)

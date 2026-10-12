@@ -13,7 +13,7 @@ Recurso("irmaos", Irmao, "secretaria", form=IrmaoForm, relacionados=("grau",),
                  ("Celular", "celular"), ("E-mail", "email")],
         busca=("nome", "cim", "cpf", "email"), filtros=("situacao", "grau"),
         acoes=[("Ficha", "irmao_ficha")], classe_linha=lambda i: "" if i.no_quadro else "apagado",
-        acoes_topo=[("Importar do Excel", "importar_irmaos")],
+        acoes_topo=[("Importar do Excel", "importar_irmaos")], selecao="irmaos_excluir_varios",
         ajuda="O grau é atualizado pelo Controle de Graus (abra a ficha do Irmão).")
 
 Recurso("dependentes", Dependente, "secretaria", relacionados=("irmao",),

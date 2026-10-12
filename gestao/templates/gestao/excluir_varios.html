@@ -1,0 +1,20 @@
+{% extends "gestao/base.html" %}
+{% block titulo %}Excluir selecionados{% endblock %}
+{% block conteudo %}
+<div class="card" style="max-width:720px">
+  <h1>Excluir {{ total }} Irmão(s)?</h1>
+  <p>Esta ação <b>não pode ser desfeita</b>. Junto com cada Irmão são apagados os dependentes, o histórico de graus, as presenças, as licenças e os certificados de visita dele. O usuário de acesso continua existindo, mas deixa de estar ligado ao cadastro.</p>
+  <p class="suave">{% for i in amostra %}{{ i.nome }}{% if not forloop.last %}; {% endif %}{% endfor %}{% if total > 12 %}; e mais {{ total|add:"-12" }}{% endif %}.</p>
+  {% if erro %}<div class="mensagem error">{{ erro }}</div>{% endif %}
+  <form method="post">{% csrf_token %}
+    {% for pk in ids %}<input type="hidden" name="ids" value="{{ pk }}">{% endfor %}
+    <input type="hidden" name="confirmar" value="1">
+    {% if com_financeiro %}<div class="nota-aviso"><b>{{ com_financeiro }} deles têm lançamentos na Tesouraria</b> (mensalidades, boletos, pagamentos). {% if pode_financeiro %}Por padrão esses Irmãos são mantidos.
+      <label class="marcar" style="margin-top:8px"><input type="checkbox" name="financeiro" value="1"{% if financeiro_marcado %} checked{% endif %}> <span>Excluir também os lançamentos e boletos desses Irmãos. Os saldos das contas e os relatórios financeiros mudam.</span></label>
+      {% else %}Esses Irmãos serão mantidos: só quem tem acesso à Tesouraria pode apagar lançamentos.{% endif %}</div>{% endif %}
+    <div class="campo{% if erro %} com-erro{% endif %}" style="max-width:320px"><label for="palavra" class="obrigatorio">Para confirmar, digite EXCLUIR</label>
+      <input type="text" name="palavra" id="palavra" autocomplete="off" required></div>
+    <div class="rodape-form"><button class="botao perigo">Excluir definitivamente</button><a class="botao claro" href="{% url 'irmaos_lista' %}">Não, voltar</a></div>
+  </form>
+</div>
+{% endblock %}

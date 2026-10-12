@@ -1,5 +1,22 @@
 {% extends "gestao/base.html" %}{% load gestao_tags %}
-{% block titulo %}{{ recurso.titulo }}{% endblock %}
+{% block titulo %}{{ recurso.titulo }}{% if recurso.selecao and linhas %}</form>
+<script>
+(function () {
+  var todos = document.getElementById('marcar-todos'), linhas = document.querySelectorAll('.marca-linha'),
+      botao = document.getElementById('excluir-selecionados'), texto = document.getElementById('contagem-selecao'),
+      paginas = document.getElementById('todas-paginas'), total = {{ total }};
+  function atualizar() {
+    var n = paginas && paginas.checked ? total : document.querySelectorAll('.marca-linha:checked').length;
+    botao.disabled = n === 0;
+    botao.textContent = n ? 'Excluir ' + n + ' selecionado' + (n > 1 ? 's' : '') : 'Excluir selecionados';
+    texto.textContent = n ? '' : 'Marque os registros na primeira coluna.';
+  }
+  todos.addEventListener('change', function () { linhas.forEach(function (c) { c.checked = todos.checked; }); atualizar(); });
+  linhas.forEach(function (c) { c.addEventListener('change', atualizar); });
+  if (paginas) paginas.addEventListener('change', function () { linhas.forEach(function (c) { c.checked = paginas.checked; }); todos.checked = paginas.checked; atualizar(); });
+})();
+</script>{% endif %}
+{% endblock %}
 {% block conteudo %}
 <div class="cabecalho">
   <div><h1>{{ recurso.titulo }}</h1><p class="suave">{{ total }} registro{{ total|pluralize }}{% if recurso.ajuda %} · {{ recurso.ajuda }}{% endif %}</p></div>
@@ -17,11 +34,19 @@
   {% if parametros %}<a class="botao claro pequeno" href="?">Limpar</a>{% endif %}
 </form>
 {% endif %}
+{% if recurso.selecao and linhas %}<form method="post" action="{% url recurso.selecao %}" id="form-selecao">{% csrf_token %}
+  {% for chave_p, valor_p in request.GET.items %}{% if chave_p != "pagina" %}<input type="hidden" name="{{ chave_p }}" value="{{ valor_p }}">{% endif %}{% endfor %}
+  <div class="filtros nao-imprimir" style="align-items:center">
+    <button class="botao perigo pequeno" id="excluir-selecionados" disabled>Excluir selecionados</button>
+    <span class="suave" id="contagem-selecao">Marque os registros na primeira coluna.</span>
+    {% if pagina.paginator.num_pages > 1 %}<label class="marcar" style="display:flex"><input type="checkbox" name="todos" value="1" id="todas-paginas"> <span>Selecionar todos os {{ total }} desta lista (todas as páginas)</span></label>{% endif %}
+  </div>{% endif %}
 <div class="card justo">
   {% if linhas %}
   <div class="rolagem"><table>
-    <thead><tr>{% for rotulo, coluna in recurso.colunas %}<th>{{ rotulo }}</th>{% endfor %}<th class="acoes"></th></tr></thead>
+    <thead><tr>{% if recurso.selecao %}<th class="acoes" style="text-align:left"><input type="checkbox" id="marcar-todos" aria-label="Selecionar todos desta página" style="width:18px;height:18px"></th>{% endif %}{% for rotulo, coluna in recurso.colunas %}<th>{{ rotulo }}</th>{% endfor %}<th class="acoes"></th></tr></thead>
     <tbody>{% for linha in linhas %}<tr class="{{ linha.classe }}">
+      {% if recurso.selecao %}<td class="acoes" style="text-align:left"><input type="checkbox" name="ids" value="{{ linha.obj.pk }}" class="marca-linha" aria-label="Selecionar {{ linha.obj }}" style="width:18px;height:18px"></td>{% endif %}
       {% for rotulo, coluna in recurso.colunas %}<td>{% celula linha.obj coluna %}</td>{% endfor %}
       <td class="acoes">{% for rotulo, link in linha.acoes %}<a href="{{ link }}">{{ rotulo }}</a>{% endfor %}<a href="{% url recurso.slug|add:'_editar' linha.obj.pk %}">Alterar</a>{% if recurso.pode_excluir %}<a href="{% url recurso.slug|add:'_excluir' linha.obj.pk %}" style="color:var(--erro)">Excluir</a>{% endif %}</td>
     </tr>{% endfor %}</tbody>
@@ -33,4 +58,21 @@
   <div class="vazio">{% if parametros %}Nada encontrado com esses filtros.{% else %}Ainda não há nada aqui.{% if recurso.pode_incluir %} Clique em <b>+ Incluir</b> para cadastrar o primeiro.{% endif %}{% endif %}</div>
   {% endif %}
 </div>
+{% if recurso.selecao and linhas %}</form>
+<script>
+(function () {
+  var todos = document.getElementById('marcar-todos'), linhas = document.querySelectorAll('.marca-linha'),
+      botao = document.getElementById('excluir-selecionados'), texto = document.getElementById('contagem-selecao'),
+      paginas = document.getElementById('todas-paginas'), total = {{ total }};
+  function atualizar() {
+    var n = paginas && paginas.checked ? total : document.querySelectorAll('.marca-linha:checked').length;
+    botao.disabled = n === 0;
+    botao.textContent = n ? 'Excluir ' + n + ' selecionado' + (n > 1 ? 's' : '') : 'Excluir selecionados';
+    texto.textContent = n ? '' : 'Marque os registros na primeira coluna.';
+  }
+  todos.addEventListener('change', function () { linhas.forEach(function (c) { c.checked = todos.checked; }); atualizar(); });
+  linhas.forEach(function (c) { c.addEventListener('change', atualizar); });
+  if (paginas) paginas.addEventListener('change', function () { linhas.forEach(function (c) { c.checked = paginas.checked; }); todos.checked = paginas.checked; atualizar(); });
+})();
+</script>{% endif %}
 {% endblock %}

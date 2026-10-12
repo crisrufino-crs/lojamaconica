@@ -19,7 +19,7 @@ RECURSOS = {}
 class Recurso:
     def __init__(self, slug, modelo, modulo, colunas, campos=None, form=None, busca=(), filtros=(), fixos=None,
                  acoes=(), acoes_topo=(), apos_salvar=None, titulo=None, ajuda="", classe_linha=None,
-                 pode_incluir=True, pode_excluir=True, ordem=None, relacionados=()):
+                 pode_incluir=True, pode_excluir=True, ordem=None, relacionados=(), selecao=None):
         self.slug, self.modelo, self.modulo, self.colunas = slug, modelo, modulo, colunas
         self.busca, self.filtros, self.fixos = busca, filtros, fixos or {}
         self.acoes, self.acoes_topo, self.apos_salvar = acoes, acoes_topo, apos_salvar
@@ -27,6 +27,7 @@ class Recurso:
         self.singular = str(modelo._meta.verbose_name)
         self.ajuda, self.classe_linha = ajuda, classe_linha
         self.pode_incluir, self.pode_excluir, self.ordem, self.relacionados = pode_incluir, pode_excluir, ordem, relacionados
+        self.selecao = selecao  # nome da tela que recebe os registros marcados na lista (exclusão em lote)
         self.form = form or modelform_factory(modelo, form=FormDaLoja, fields=campos or "__all__")
         if fixos and not getattr(self.form, "fixos", None):
             self.form = type(f"{modelo.__name__}Form", (self.form,), {"fixos": fixos})
@@ -55,9 +56,10 @@ class Recurso:
         return opcoes
 
     # ---- telas ---------------------------------------------------------------
-    def lista(self, request):
+    def filtrada(self, request, parametros):
+        """A lista já com a busca e os filtros escolhidos na tela. Devolve (consulta, termo, filtros)."""
         qs = self.consulta(request)
-        termo = request.GET.get("q", "").strip()
+        termo = parametros.get("q", "").strip()
         if termo and self.busca:
             condicao = Q()
             for campo in self.busca:
@@ -65,8 +67,13 @@ class Recurso:
             qs = qs.filter(condicao)
         filtros = self.opcoes_filtro(request)
         for f in filtros:
+            f["atual"] = parametros.get(f["nome"], "")
             if f["atual"] and f["atual"] in dict(f["escolhas"]):
                 qs = qs.filter(**{f["nome"]: f["atual"]})
+        return qs, termo, filtros
+
+    def lista(self, request):
+        qs, termo, filtros = self.filtrada(request, request.GET)
         pagina = Paginator(qs, 50).get_page(request.GET.get("pagina"))
         parametros = request.GET.copy()
         parametros.pop("pagina", None)

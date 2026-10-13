@@ -10,7 +10,7 @@
   <dl class="lista-dados">
     <div><dt>Nome</dt><dd>{{ irmao.nome }}</dd></div><div><dt>CIM</dt><dd>{{ irmao.cim|fmt }}</dd></div>
     <div><dt>Grau</dt><dd>{{ irmao.grau|fmt }}</dd></div><div><dt>Cargo</dt><dd>{{ irmao.cargo|fmt }}</dd></div>
-    <div><dt>Situação</dt><dd>{{ irmao.get_situacao_display }}</dd></div><div><dt>Nascimento</dt><dd>{{ irmao.data_nascimento|fmt }}</dd></div>
+    <div><dt>Situação</dt><dd>{{ irmao.get_situacao_display }}</dd></div><div><dt>Mensalidade</dt><dd>{{ irmao.valor_mensalidade|brl }}{% if irmao.situacao == "remido" %} <span class="selo">remido — isento</span>{% elif not irmao.cotizante %} <span class="selo">não cotizante</span>{% endif %}</dd></div><div><dt>Nascimento</dt><dd>{{ irmao.data_nascimento|fmt }}</dd></div>
     <div><dt>Iniciação</dt><dd>{{ irmao.data_iniciacao|fmt }}</dd></div><div><dt>E-mail</dt><dd>{{ irmao.email|fmt }}</dd></div>
     <div><dt>Celular</dt><dd>{{ irmao.celular|fmt }}</dd></div><div><dt>Endereço</dt><dd>{{ irmao.endereco|fmt }}{% if irmao.cidade %} — {{ irmao.cidade }}/{{ irmao.uf }}{% endif %}</dd></div>
     {% for rotulo, valor in extras %}<div><dt>{{ rotulo }}</dt><dd>{{ valor }}</dd></div>{% endfor %}

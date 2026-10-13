@@ -201,6 +201,14 @@ class Irmao(DaLoja):
     def no_quadro(self):
         return self.situacao in self.NO_QUADRO
 
+    @property
+    def valor_mensalidade(self):
+        """Quanto este Irmão paga por mês: R$ 0,00 se for Remido; senão o valor próprio ou o padrão da Loja."""
+        from decimal import Decimal
+        if self.situacao == "remido":
+            return Decimal("0.00")
+        return self.mensalidade_individual or self.loja.valor_mensalidade
+
 
 class Dependente(DaLoja):
     PARENTESCOS = [("conjuge", "Cônjuge"), ("filho", "Filho(a)"), ("enteado", "Enteado(a)"),

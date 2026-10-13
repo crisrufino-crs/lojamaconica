@@ -495,7 +495,7 @@ def planilha_da_loja(loja, ano):
     for i in irmaos:
         remido = i.situacao == "remido"
         linha = [float(i.centavos) if i.centavos is not None else None, i.nome, i.cim or None,
-                 "SIM" if i.cotizante else "NÃO", "REMIDO" if remido else float(i.mensalidade_individual or loja.valor_mensalidade or 0)]
+                 "SIM" if i.cotizante else "NÃO", 0.0 if remido else float(i.mensalidade_individual or loja.valor_mensalidade or 0)]
         linha += ["REMIDO" if remido else situacao.get((i.pk, m), "") or None for m in range(1, 13)]
         aba.append(linha)
     for coluna, titulo in enumerate(titulos, 1):
@@ -531,7 +531,7 @@ def planilha_da_loja(loja, ano):
     for linha in [["Como preencher a planilha financeira"], [""],
                   ["1.", "Na aba Mensalidade, uma linha por Obreiro. Nos meses escreva: PAGO, REMIDO, Acordo ou XXX-XXX (não se aplica)."],
                   ["2.", "Mês em branco = ainda não pago (vira mensalidade em aberto até o mês atual, se você escolher assim ao importar)."],
-                  ["3.", "Cotizante: SIM ou NÃO. R$: o valor da mensalidade do Obreiro, ou REMIDO."],
+                  ["3.", "Cotizante: SIM ou NÃO. R$: o valor da mensalidade do Obreiro (0,00 ou REMIDO para os remidos)."],
                   ["4.", "Centavos: o número que identifica o Obreiro no pagamento (ex.: 0,07 → paga R$ 180,07)."],
                   ["5.", "Na aba Tronco, o valor arrecadado em cada mês."],
                   ["6.", "Enviar a mesma planilha de novo não duplica nada: o que já está no sistema é mantido."]]:

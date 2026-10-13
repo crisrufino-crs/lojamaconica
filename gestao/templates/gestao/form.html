@@ -42,12 +42,19 @@
     var remido = planoRemido();
     if (remido) {
       if (descricao.value !== 'Isento') { anterior.descricao = descricao.value; }
-      if (valor.value) { anterior.valor = valor.value; }
-      descricao.value = 'Isento'; valor.value = '';
+      if (valor.value && Number(valor.value) !== 0) { anterior.valor = valor.value; }
+      descricao.value = 'Isento'; valor.value = '0.00';
     } else if (descricao.value === 'Isento') {
       descricao.value = anterior.descricao || 'Mensalidade'; valor.value = anterior.valor || '';
     }
-    valor.closest('.campo').style.display = remido ? 'none' : '';
+    /* Remido: o valor aparece como R$ 0,00 e não pode ser alterado (não há nada a pagar). */
+    valor.readOnly = remido;
+    valor.style.background = remido ? 'var(--cabecalho-tabela)' : '';
+    var rotuloValor = valor.closest('.campo').querySelector('label');
+    if (rotuloValor) {
+      rotuloValor.dataset.original = rotuloValor.dataset.original || rotuloValor.textContent;
+      rotuloValor.textContent = remido ? 'Valor (R$ 0,00 — Remido, sem valor a pagar)' : rotuloValor.dataset.original;
+    }
     if (pagantes) pagantes.closest('.campo').style.display = remido ? 'none' : '';
     var aviso = document.getElementById('aviso-remido');
     if (aviso) aviso.style.display = remido ? '' : 'none';

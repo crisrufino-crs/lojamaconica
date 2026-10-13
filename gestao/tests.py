@@ -708,7 +708,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-M")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-O")
 
 
 def importacao_colunas():
@@ -1216,3 +1216,43 @@ class PlanoRemidoIsento(Base):
         migracao.criar_plano_remido(registro, None)
         self.assertEqual(PlanoConta.objects.filter(loja=self.outra, nome__startswith="Remido").count(), 1)
         self.assertEqual(PlanoConta.objects.filter(loja=self.loja, nome__startswith="Remido").count(), 1)
+
+
+class RemidoValorZero(Base):
+    def test_remido_aparece_com_r_0_00(self):
+        Irmao.objects.filter(pk=self.irmaos[0].pk).update(situacao="remido", centavos=D("0.05"))
+        Irmao.objects.filter(pk=self.irmaos[1].pk).update(centavos=D("0.06"))
+        self.assertEqual(Irmao.objects.get(pk=self.irmaos[0].pk).valor_mensalidade, D("0.00"))
+        self.assertEqual(Irmao.objects.get(pk=self.irmaos[1].pk).valor_mensalidade, D("100"))
+        self.entrar(self.master)
+        ficha = self.client.get(reverse("irmao_ficha", args=[self.irmaos[0].pk]))
+        self.assertContains(ficha, "R$ 0,00")
+        self.assertContains(ficha, "remido — isento")
+        self.assertContains(self.client.get(reverse("minha_area")), "R$ 0,00")  # o master é o Irmão 0
+        controle = self.client.get(reverse("relatorio", args=["mensalidades-ano"]), {"ano": self.hoje.year})
+        linha = next(l for l in controle.context["resultado"]["linhas"] if l[1] == "Irmão 0")
+        self.assertEqual(linha[3], D("0.00"))
+        self.assertContains(controle, "R$ 0,00")
+        tabela = self.client.get(reverse("relatorio", args=["centavos"])).context["resultado"]["linhas"]
+        self.assertEqual(next(l for l in tabela if l[1] == "Irmão 0")[3], D("0.00"))
+        self.assertEqual(next(l for l in tabela if l[1] == "Irmão 1")[3], D("100.06"))
+        planilha = self.client.get(reverse("relatorio", args=["mensalidades-ano"]), {"ano": self.hoje.year, "formato": "csv"})
+        self.assertIn("Irmão 0;Sim;0,00", planilha.content.decode("utf-8-sig"))
+
+
+class RemidoComValorZero(Base):
+    def test_remido_aparece_com_r0_nos_relatorios_e_na_planilha(self):
+        import io
+        from openpyxl import load_workbook
+        Irmao.objects.filter(pk=self.irmaos[0].pk).update(situacao="remido", centavos=D("0.07"))
+        self.entrar(self.tesoureiro)
+        r = self.client.get(reverse("relatorio", args=["mensalidades-ano"]), {"ano": self.hoje.year})
+        linha = next(l for l in r.context["resultado"]["linhas"] if l[1] == "Irmão 0")
+        self.assertEqual(linha[3], D("0.00"))
+        self.assertContains(r, "R$ 0,00")
+        r = self.client.get(reverse("relatorio", args=["centavos"]))
+        linha = next(l for l in r.context["resultado"]["linhas"] if l[1] == "Irmão 0")
+        self.assertEqual(linha[3], D("0.00"))
+        pasta = load_workbook(io.BytesIO(self.client.get(reverse("planilha_financeira")).content))
+        linha = next(l for l in pasta["Mensalidade"].iter_rows(values_only=True) if l[1] == "Irmão 0")
+        self.assertEqual((linha[4], linha[5]), (0, "REMIDO"))

@@ -62,7 +62,7 @@
     <td>{{ o.linha }}</td><td>{{ o.nome_planilha }}</td>
     <td>{% if o.acao == "vincular" %}{{ o.irmao_nome }}{% elif o.acao == "novo" %}{% selo "novo no cadastro" "atencao" %} {{ o.irmao_nome }}{% else %}{% selo "ignorado" "ruim" %}{% endif %}</td>
     <td>{% if o.cotizante is True %}Sim{% elif o.cotizante is False %}Não{% else %}—{% endif %}</td>
-    <td class="num">{% if o.remido %}Remido{% elif o.valor %}{{ o.valor|floatformat:2 }}{% else %}—{% endif %}</td>
+    <td class="num">{% if o.remido %}R$ 0,00 <span class="selo">remido</span>{% elif o.valor %}{{ o.valor|brl }}{% else %}—{% endif %}</td>
     <td>{{ o.centavos|default:"—" }}</td>
     <td><div class="grade-meses">{% for sigla, classe, mes in o.grade %}<span class="{{ classe }}" title="{{ mes }}">{{ sigla|default:"·" }}</span>{% endfor %}</div></td>
     <td>{{ o.avisos|join:"; " }}</td></tr>{% endfor %}</tbody>

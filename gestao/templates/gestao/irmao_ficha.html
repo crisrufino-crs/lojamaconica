@@ -18,6 +18,7 @@
     <div><dt>Cidade</dt><dd>{{ irmao.cidade|fmt }}{% if irmao.uf %}/{{ irmao.uf }}{% endif %}{% if irmao.cep %} · CEP {{ irmao.cep }}{% endif %}</dd></div>
     <div><dt>Pai</dt><dd>{{ irmao.nome_pai|fmt }}</dd></div><div><dt>Mãe</dt><dd>{{ irmao.nome_mae|fmt }}</dd></div>
     <div><dt>Iniciação</dt><dd>{{ irmao.data_iniciacao|fmt }}</dd></div><div><dt>Filiação à Loja</dt><dd>{{ irmao.data_filiacao|fmt }}</dd></div>
+    <div><dt>Mensalidade</dt><dd>{{ irmao.valor_mensalidade|brl }}{% if irmao.situacao == "remido" %} <span class="selo">remido — isento</span>{% elif not irmao.cotizante %} <span class="selo">não cotizante</span>{% endif %}</dd></div>
     <div><dt>Acesso ao sistema</dt><dd>{% if usuario_do_irmao %}{{ usuario_do_irmao.username }}{% else %}Ainda não tem usuário{% endif %}</dd></div>
     {% for rotulo, valor in extras %}<div><dt>{{ rotulo }}</dt><dd>{{ valor }}</dd></div>{% endfor %}
   </dl>

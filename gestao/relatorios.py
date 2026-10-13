@@ -497,7 +497,7 @@ def mensalidades_ano(loja, f):
             pagos_mes[m - 1] += valor == "Pago"
             meses.append(valor or None)
         linhas.append(Linha([f"{i.centavos:.2f}".replace(".", ",") if i.centavos is not None else None, i.nome,
-                             "Sim" if i.cotizante else "Não", "Remido" if remido else (i.mensalidade_individual or loja.valor_mensalidade),
+                             "Sim" if i.cotizante else "Não", Decimal("0.00") if remido else (i.mensalidade_individual or loja.valor_mensalidade),
                              *meses], "atrasado" if "Vencido" in meses else ""))
     linhas.append(Linha(["", "Pagamentos no mês", "", "", *pagos_mes], "total"))
     return {"colunas": ["Centavos", "Obreiro", "Cotizante", "R$"] + [m[:3] for m in MESES], "linhas": linhas,
@@ -512,6 +512,7 @@ def centavos(loja, f):
         c = Decimal(n) / 100
         i = usados.get(c)
         linhas.append(Linha([f"{c:.2f}".replace(".", ","), i.nome if i else "LIVRE", i.cim if i else "",
-                             (i.mensalidade_individual or loja.valor_mensalidade) + c if i else None], "" if i else "apagado"))
+                             (Decimal("0.00") if i.situacao == "remido" else (i.mensalidade_individual or loja.valor_mensalidade) + c) if i else None],
+                            "" if i else "apagado"))
     return {"colunas": ["Centavos", "Irmão", "CIM", "Valor a pagar"], "linhas": linhas,
             "resumo": f"{len(usados)} centavo(s) em uso, {99 - len(usados)} livre(s)"}

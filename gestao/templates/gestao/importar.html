@@ -20,6 +20,7 @@
   <div class="card cartao-numero"><div class="rotulo">Serão atualizados</div><div class="valor">{{ analise.atualizados }}</div><div class="nota">já existem no cadastro</div></div>
   <div class="card cartao-numero"><div class="rotulo">Linhas recusadas</div><div class="valor">{{ analise.erros|length }}</div><div class="nota">ficam de fora; veja o motivo abaixo</div></div>
 </div>
+<div class="mensagem error" style="font-size:16px"><b>Atenção: os Irmãos ainda NÃO foram gravados.</b> Confira o resumo abaixo e clique no botão <b>“Gravar”</b> para concluir a importação.</div>
 <section class="card"><h2>2. Confira: {{ arquivo_nome }}</h2>
   <p><b>Colunas reconhecidas:</b> {% for original, destino in analise.colunas %}{{ original }}{% if original != destino %} → {{ destino }}{% endif %}{% if not forloop.last %}; {% endif %}{% endfor %}.</p>
   {% if analise.ignoradas %}<div class="nota-aviso"><b>Colunas ignoradas</b> (o sistema não tem onde guardar): {{ analise.ignoradas|join:"; " }}. Para aproveitá-las, crie um campo com o mesmo nome em Administração › Campos personalizados e envie a planilha de novo.</div>{% endif %}

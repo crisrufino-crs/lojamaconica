@@ -708,7 +708,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 11/10/2026-G")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-H")
 
 
 def importacao_colunas():
@@ -911,3 +911,51 @@ class ExcluirVariosNosModulos(Base):
         self.assertFalse(Licenca.objects.exists())
         self.entrar(self.tesoureiro)
         self.assertEqual(self.client.post(url, {"todos": "1"}).status_code, 403)
+
+
+class ComandosDeImportacao(Base):
+    def _planilha(self, pasta, linhas):
+        from openpyxl import Workbook
+        pasta_xlsx = Workbook()
+        for linha in linhas:
+            pasta_xlsx.active.append(linha)
+        caminho = f"{pasta}/cadastro.xlsx"
+        pasta_xlsx.save(caminho)
+        return caminho
+
+    def test_importar_irmaos_confere_e_so_grava_com_a_opcao(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        with tempfile.TemporaryDirectory() as pasta:
+            caminho = self._planilha(pasta, [["Nome completo", "CIM", "Grau"], ["Irmão Planilha", 777, "Mestre"]])
+            saida = StringIO()
+            call_command("importar_irmaos", caminho, "--loja", "1", stdout=saida)
+            self.assertIn("1 novo(s)", saida.getvalue())
+            self.assertFalse(Irmao.objects.filter(nome="Irmão Planilha").exists())
+            call_command("importar_irmaos", caminho, "--loja", "Loja A", "--gravar", stdout=StringIO())
+            self.assertEqual(Irmao.objects.get(nome="Irmão Planilha").loja, self.loja)
+            with self.assertRaises(CommandError):
+                call_command("importar_irmaos", caminho, "--loja", "Loja Inexistente", stdout=StringIO())
+
+    def test_carga_inicial_importa_uma_unica_vez(self):
+        from io import StringIO
+        from pathlib import Path
+        from django.core.management import call_command
+        with tempfile.TemporaryDirectory() as pasta:
+            self._planilha(pasta, [["Nome completo", "CIM", "Celular"], ["Irmão Carga", 888, "(11) 90000-0000"]])
+            saida = StringIO()
+            call_command("carga_inicial", "--pasta", pasta, stdout=saida, stderr=saida)
+            self.assertIn("falta o arquivo carga/loja.txt", saida.getvalue())
+            Path(pasta, "loja.txt").write_text("2\n", encoding="utf-8")  # número da Loja B
+            call_command("carga_inicial", "--pasta", pasta, stdout=StringIO())
+            irmao = Irmao.objects.get(nome="Irmão Carga")
+            self.assertEqual(irmao.loja, self.outra)
+            irmao.celular = "(11) 95555-5555"  # alteração feita depois, pelo site
+            irmao.save()
+            saida = StringIO()
+            call_command("carga_inicial", "--pasta", pasta, stdout=saida)  # próxima instalação
+            self.assertIn("já tinha sido importada", saida.getvalue())
+            irmao.refresh_from_db()
+            self.assertEqual(irmao.celular, "(11) 95555-5555")
+            self.assertEqual(Irmao.objects.filter(nome="Irmão Carga").count(), 1)

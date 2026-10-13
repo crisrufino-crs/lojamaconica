@@ -623,3 +623,14 @@ class RotinaDiaria(DaLoja):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["loja", "data"], name="rotina_unica_por_dia")]
+
+
+class CargaImportada(DaLoja):
+    """Planilha de carga inicial já importada na instalação (para não importar a mesma planilha duas vezes)."""
+    arquivo = models.CharField(max_length=200)
+    assinatura = models.CharField(max_length=64)
+    importada_em = models.DateTimeField(auto_now_add=True)
+    resumo = models.CharField(max_length=250, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["loja", "assinatura"], name="carga_unica_por_loja")]

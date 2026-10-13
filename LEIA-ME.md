@@ -55,6 +55,13 @@ Em Secretaria › Importar planilha: baixe a planilha modelo, preencha (uma linh
 O sistema mostra uma conferência (quantos serão incluídos, atualizados e recusados, com o motivo) e só grava
 depois da confirmação. Irmão que já existe (mesmo CIM, CPF ou nome) é atualizado, não duplicado.
 
+## Carga inicial pela instalação (sem usar a tela)
+
+Coloque a planilha (.xlsx, no formato da planilha modelo) na pasta `carga/` e, em `carga/loja.txt`, o número
+ou o nome da Loja de destino. Na próxima instalação no Render, os Irmãos são importados automaticamente.
+Cada planilha é importada uma única vez, então as instalações seguintes não desfazem alterações feitas pelo site.
+Para importar de novo, troque o arquivo. Pelo terminal: `python manage.py importar_irmaos arquivo.xlsx --loja 123 --gravar`.
+
 ## O que já funciona e o que depende de contratar/configurar
 
 | Recurso | Situação |

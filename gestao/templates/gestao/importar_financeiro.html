@@ -1,0 +1,88 @@
+{% extends "gestao/base.html" %}{% load gestao_tags %}
+{% block titulo %}Importar planilha financeira{% endblock %}
+{% block conteudo %}
+<style>
+.etapas{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:16px}
+.etapa{background:var(--card);border:1px solid var(--borda);border-radius:12px;padding:12px 16px;display:flex;gap:12px;align-items:center;color:var(--suave)}
+.etapa b{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--cabecalho-tabela);color:var(--suave);flex:none}
+.etapa.atual{border-color:var(--primaria);color:var(--texto);font-weight:600}.etapa.atual b{background:var(--primaria);color:var(--sobre-primaria)}
+.etapa.feita b{background:var(--sucesso);color:#fff}
+.grade-meses{display:grid;grid-template-columns:repeat(12,30px);gap:2px}
+.grade-meses span{display:grid;place-items:center;height:22px;border-radius:4px;font-size:11px;font-weight:600;background:var(--cabecalho-tabela);color:var(--suave)}
+.grade-meses span.ok{background:var(--sucesso-fundo);color:var(--sucesso)}.grade-meses span.ruim{background:var(--erro-fundo);color:var(--erro)}
+.grade-meses span.atencao{background:var(--aviso-fundo);color:var(--aviso)}
+@media (max-width:768px){.etapas{grid-template-columns:1fr}}
+</style>
+<div class="cabecalho"><div><h1>Importar planilha financeira</h1><p class="suave">Mensalidades, centavos de identificação e tronco de beneficência, no mesmo formato da planilha que a Tesouraria já usa. Nada é gravado antes de você clicar em “Salvar no sistema”.</p></div>
+  <div class="acoes"><form method="get" action="{% url 'planilha_financeira' %}" style="display:flex;gap:8px;align-items:center">
+    <label class="suave" for="ano-modelo" style="font-size:13px">Ano</label><input type="number" name="ano" id="ano-modelo" value="{{ ano_atual }}" style="width:96px;padding:8px 10px">
+    <button class="botao claro">Baixar planilha no formato da Loja</button></form></div></div>
+<div class="etapas" aria-label="Etapas da importação">
+  <div class="etapa {% if etapa == 1 %}atual{% else %}feita{% endif %}"><b>{% if etapa > 1 %}✓{% else %}1{% endif %}</b> Escolher e importar o arquivo</div>
+  <div class="etapa {% if etapa == 2 %}atual{% elif etapa > 2 %}feita{% endif %}"><b>{% if etapa > 2 %}✓{% else %}2{% endif %}</b> Verificar o arquivo</div>
+  <div class="etapa {% if etapa == 3 %}feita atual{% endif %}"><b>{% if etapa == 3 %}✓{% else %}3{% endif %}</b> Salvar no sistema</div>
+</div>
+
+{% if etapa == 1 %}
+<form method="post" enctype="multipart/form-data" class="card" novalidate>{% csrf_token %}
+  <h2>1. Escolha a planilha e importe</h2>
+  {% if form.errors %}<div class="mensagem error">Confira os campos destacados em vermelho.</div>{% endif %}
+  {% include "gestao/_campos.html" %}
+  <div class="rodape-form"><button class="botao">Importar e verificar o arquivo</button></div>
+  <p class="ajuda" style="margin-top:12px">Nesta etapa o sistema só lê a planilha. Nada é gravado ainda.</p>
+</form>
+<section class="card"><h2>O que o sistema lê da planilha</h2>
+  <p><b>Aba de mensalidades</b> (títulos: Centavos, Nome do Obreiro, Cotizante, R$ e os meses de JANEIRO a DEZEMBRO). Em cada mês: <b>PAGO</b> vira mensalidade quitada; <b>REMIDO</b> e <b>XXX-XXX</b> não geram cobrança; <b>Acordo</b> vira mensalidade em aberto marcada como acordo; mês vazio segue a opção escolhida acima.</p>
+  <p><b>Aba de centavos</b> (títulos: CIM, NOME, CENTAVOS): grava os centavos de identificação de cada Irmão e usa o CIM para achar o Irmão certo.</p>
+  <p><b>Aba do tronco</b> (um mês por linha, com o valor): cada mês com valor vira uma receita do tronco de beneficência.</p>
+  <p class="ajuda">Os nomes são comparados com o cadastro de Irmãos mesmo com pequenas diferenças (maiúsculas, acentos, “Jr”, nomes abreviados, número de Loja no fim do nome). Enviar a mesma planilha de novo não duplica nada.</p>
+</section>
+
+{% elif etapa == 2 %}
+<div class="mensagem error" style="font-size:16px"><b>Nada foi salvo ainda.</b> Verifique o resumo abaixo e clique em <b>“Salvar no sistema”</b> para concluir.</div>
+<div class="grade">
+  <div class="card cartao-numero"><div class="rotulo">Obreiros na planilha</div><div class="valor">{{ analise.obreiros|length }}</div><div class="nota">{{ analise.contagem.novos|default:0 }} serão incluídos no cadastro{% if analise.contagem.ignorados %}; {{ analise.contagem.ignorados }} ignorados{% endif %}</div></div>
+  <div class="card cartao-numero"><div class="rotulo">Mensalidades pagas</div><div class="valor">{{ analise.contagem.pago|default:0 }}</div><div class="nota">entram como quitadas em {{ guardada.conta_nome }}</div></div>
+  <div class="card cartao-numero"><div class="rotulo">Em aberto / acordo</div><div class="valor">{{ analise.contagem.aberto|default:0 }} / {{ analise.contagem.acordo|default:0 }}</div><div class="nota">{% if analise.em_branco == "aberto" %}meses vazios até {{ analise.ate_mes }}/{{ analise.ano }} entram em aberto{% else %}meses vazios não geram cobrança{% endif %}</div></div>
+  <div class="card cartao-numero"><div class="rotulo">Sem cobrança</div><div class="valor">{{ analise.contagem.isento|default:0 }} / {{ analise.contagem.nao_se_aplica|default:0 }}</div><div class="nota">remidos / não se aplica (XXX)</div></div>
+</div>
+<section class="card"><h2>2. Verificação: {{ guardada.arquivo }} — ano {{ analise.ano }}</h2>
+  <p><b>Abas lidas:</b> {{ analise.abas_usadas|join:"; " }}.{% if analise.abas_ignoradas %} <span class="suave">Ignoradas (sem o formato esperado): {{ analise.abas_ignoradas|join:"; " }}.</span>{% endif %}</p>
+  <p><b>Tronco de beneficência:</b> {% if guardada.tronco %}{{ analise.tronco|length }} mês(es) lidos, total {{ analise.tronco_total|brl }}{% if analise.tronco_total == "0" %} (nada a lançar){% endif %}.{% else %}não será importado.{% endif %}
+    {% if analise.centavos_soltos %} <b>Centavos</b> de mais {{ analise.centavos_soltos|length }} Irmão(s) que só aparecem na aba de centavos.{% endif %}</p>
+  {% if analise.com_avisos %}<div class="nota-aviso"><b>{{ analise.com_avisos }} linha(s) com observação</b> — veja a coluna “Observações” na tabela abaixo antes de salvar.</div>{% endif %}
+  <form method="post" class="rodape-form" style="margin-top:8px">{% csrf_token %}
+    <button class="botao" name="acao" value="gravar">Salvar no sistema</button>
+    <button class="botao claro" name="acao" value="cancelar">Cancelar e escolher outro arquivo</button>
+  </form>
+</section>
+<div class="card justo"><div class="rolagem"><table>
+  <thead><tr><th>Linha</th><th>Na planilha</th><th>No sistema</th><th>Cotizante</th><th class="num">R$</th><th>Centavos</th><th>Meses de {{ analise.ano }}<div class="grade-meses" style="margin-top:4px">{% for m in meses_curtos %}<span style="background:none">{{ m|slice:":1" }}</span>{% endfor %}</div></th><th>Observações</th></tr></thead>
+  <tbody>{% for o in linhas %}<tr class="{% if o.acao == 'ignorar' %}apagado{% elif o.avisos %}atrasado{% endif %}">
+    <td>{{ o.linha }}</td><td>{{ o.nome_planilha }}</td>
+    <td>{% if o.acao == "vincular" %}{{ o.irmao_nome }}{% elif o.acao == "novo" %}{% selo "novo no cadastro" "atencao" %} {{ o.irmao_nome }}{% else %}{% selo "ignorado" "ruim" %}{% endif %}</td>
+    <td>{% if o.cotizante is True %}Sim{% elif o.cotizante is False %}Não{% else %}—{% endif %}</td>
+    <td class="num">{% if o.remido %}Remido{% elif o.valor %}{{ o.valor|floatformat:2 }}{% else %}—{% endif %}</td>
+    <td>{{ o.centavos|default:"—" }}</td>
+    <td><div class="grade-meses">{% for sigla, classe, mes in o.grade %}<span class="{{ classe }}" title="{{ mes }}">{{ sigla|default:"·" }}</span>{% endfor %}</div></td>
+    <td>{{ o.avisos|join:"; " }}</td></tr>{% endfor %}</tbody>
+</table></div></div>
+<p class="ajuda">Meses: <b>P</b> pago · <b>A</b> em aberto · <b>Ac</b> acordo · <b>R</b> remido · <b>—</b> não se aplica · <b>·</b> nada a lançar.</p>
+
+{% else %}
+<section class="card" style="border-top:4px solid var(--sucesso)">
+  <h2>3. Salvo no sistema</h2>
+  <p style="font-size:16px">A planilha <b>{{ salva.arquivo }}</b> ({{ salva.ano }}) foi salva.</p>
+  <ul>
+    <li>{{ salva.resultado.pagos_criados|default:0 }} mensalidade(s) paga(s) lançada(s){% if salva.resultado.pagos_quitados %} e {{ salva.resultado.pagos_quitados }} que estavam em aberto foram quitadas{% endif %}</li>
+    <li>{{ salva.resultado.abertos_criados|default:0 }} em aberto e {{ salva.resultado.acordos_criados|default:0 }} em acordo</li>
+    <li>{{ salva.resultado.irmaos_criados|default:0 }} Irmão(s) incluído(s) no cadastro e {{ salva.resultado.irmaos_atualizados|default:0 }} atualizado(s) (cotizante, valor, centavos)</li>
+    {% if salva.resultado.tronco_lancado %}<li>{{ salva.resultado.tronco_lancado }} mês(es) de tronco de beneficência</li>{% endif %}
+    {% if salva.resultado.ja_existiam %}<li>{{ salva.resultado.ja_existiam }} lançamento(s) já estavam no sistema e foram mantidos</li>{% endif %}
+    {% if salva.resultado.centavos_em_conflito %}<li>{{ salva.resultado.centavos_em_conflito }} centavo(s) não gravados porque já pertencem a outro Irmão</li>{% endif %}
+    {% if salva.resultado.valor_padrao_definido %}<li>O valor padrão da mensalidade da Loja foi definido a partir da planilha</li>{% endif %}
+  </ul>
+  <div class="rodape-form"><a class="botao" href="{% url 'relatorio' 'mensalidades-ano' %}?ano={{ salva.ano }}">Ver o controle de mensalidades</a><a class="botao claro" href="{% url 'receber_lista' %}">Contas a receber</a><a class="botao claro" href="{% url 'importar_financeiro' %}">Importar outra planilha</a></div>
+</section>
+{% endif %}
+{% endblock %}

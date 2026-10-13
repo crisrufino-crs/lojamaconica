@@ -472,3 +472,46 @@ def emprestimos(loja, f):
     return {"colunas": ["Emprestado em", "Bem", "Quem usa", "Irmão responsável", "Previsão", "Devolvido em"],
             "linhas": [Linha([e.data_emprestimo, str(e.bem), e.beneficiario, e.irmao, e.previsao_devolucao, e.data_devolucao])
                        for e in qs]}
+
+
+@relatorio("mensalidades-ano", "Controle de mensalidades do ano", "tesouraria", ("ano",),
+           "Mês a mês, quem pagou, quem está em aberto e quem é remido — no formato da planilha da Tesouraria.")
+def mensalidades_ano(loja, f):
+    ano = f["ano"]
+    plano = PlanoConta.objects.filter(loja=loja, codigo="1.1").first()
+    lancs = Lancamento.objects.filter(loja=loja, tipo="R", irmao__isnull=False, competencia__year=ano).exclude(status="cancelado")
+    if plano:
+        lancs = lancs.filter(plano=plano)
+    mapa = {}
+    for l in lancs:
+        mapa[(l.irmao_id, l.competencia.month)] = "Pago" if l.status == "pago" else (
+            "Acordo" if "acordo" in l.observacao.lower() else ("Vencido" if l.vencido else "Aberto"))
+    irmaos = sorted(Irmao.objects.filter(loja=loja, situacao__in=Irmao.NO_QUADRO),
+                    key=lambda i: (i.centavos is None, i.centavos or 0, i.nome))
+    linhas, pagos_mes = [], [0] * 12
+    for i in irmaos:
+        remido = i.situacao == "remido"
+        meses = []
+        for m in range(1, 13):
+            valor = "Remido" if remido else mapa.get((i.pk, m), "")
+            pagos_mes[m - 1] += valor == "Pago"
+            meses.append(valor or None)
+        linhas.append(Linha([f"{i.centavos:.2f}".replace(".", ",") if i.centavos is not None else None, i.nome,
+                             "Sim" if i.cotizante else "Não", "Remido" if remido else (i.mensalidade_individual or loja.valor_mensalidade),
+                             *meses], "atrasado" if "Vencido" in meses else ""))
+    linhas.append(Linha(["", "Pagamentos no mês", "", "", *pagos_mes], "total"))
+    return {"colunas": ["Centavos", "Obreiro", "Cotizante", "R$"] + [m[:3] for m in MESES], "linhas": linhas,
+            "resumo": f"{ano}: {sum(pagos_mes)} mensalidade(s) paga(s); {sum(1 for v in mapa.values() if v == 'Vencido')} vencida(s)"}
+
+
+@relatorio("centavos", "Tabela de centavos", "tesouraria", (), "Os centavos que identificam cada Irmão no pagamento, e os que estão livres.")
+def centavos(loja, f):
+    usados = {i.centavos: i for i in Irmao.objects.filter(loja=loja, centavos__isnull=False)}
+    linhas = []
+    for n in range(1, 100):
+        c = Decimal(n) / 100
+        i = usados.get(c)
+        linhas.append(Linha([f"{c:.2f}".replace(".", ","), i.nome if i else "LIVRE", i.cim if i else "",
+                             (i.mensalidade_individual or loja.valor_mensalidade) + c if i else None], "" if i else "apagado"))
+    return {"colunas": ["Centavos", "Irmão", "CIM", "Valor a pagar"], "linhas": linhas,
+            "resumo": f"{len(usados)} centavo(s) em uso, {99 - len(usados)} livre(s)"}

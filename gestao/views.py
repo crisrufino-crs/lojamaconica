@@ -22,10 +22,11 @@ from django.views.decorators.http import require_POST
 
 from . import boleto as boletos_servico
 from . import importacao
+from . import importacao_financeira
 from . import servicos
 from .cadastros import INICIO_DO_MODULO
-from .forms import EmailForm, MensalidadesForm, NovaLojaForm, PersonalizarForm, QuitarForm
-from .models import (Ata, Boleto, CampoExtra, ContaBancaria, EmailEnviado, Emprestimo, Evento, Informativo,
+from .forms import ImportarFinanceiroForm, EmailForm, MensalidadesForm, NovaLojaForm, PersonalizarForm, QuitarForm
+from .models import (PlanoConta, Ata, Boleto, CampoExtra, ContaBancaria, EmailEnviado, Emprestimo, Evento, Informativo,
                      InscricaoPush, Irmao, Lancamento, Loja, LojaCoirma, Notificacao, Presenca, Remessa, Retorno, Sessao,
                      Usuario)
 from .permissoes import MODULOS, com_loja, exige, so_plataforma
@@ -433,6 +434,77 @@ def boleto_ver(request, pk):
         x += largura
     return render(request, "gestao/boleto.html", {"b": b, "l": b.lancamento, "barras": barras, "largura_total": x,
                                                   "modulo": "tesouraria" if request.user.pode("tesouraria") else ""})
+
+
+@exige("tesouraria")
+def importar_financeiro(request):
+    """Importa a planilha financeira da Loja em três etapas: escolher o arquivo, verificar e salvar."""
+    loja = request.loja
+    guardada = request.session.get("importacao_fin")
+    if guardada and guardada.get("loja") != loja.pk:
+        guardada = None
+    form = ImportarFinanceiroForm(loja=loja, initial={"conta": ContaBancaria.objects.filter(loja=loja, ativa=True).first()})
+    if request.method == "POST":
+        acao = request.POST.get("acao")
+        if acao == "cancelar":
+            request.session.pop("importacao_fin", None)
+            return redirect("importar_financeiro")
+        if acao == "gravar":
+            if not guardada:
+                messages.error(request, "A verificação expirou. Escolha o arquivo de novo.")
+                return redirect("importar_financeiro")
+            conta = ContaBancaria.objects.filter(loja=loja, pk=guardada["conta"]).first()
+            plano = PlanoConta.objects.filter(loja=loja, codigo="1.1").first()
+            if conta is None or plano is None:
+                messages.error(request, "Falta a conta ou a conta 1.1 Mensalidades no plano de contas.")
+                return redirect("importar_financeiro")
+            plano_tronco = PlanoConta.objects.filter(loja=loja, codigo="1.3").first() if guardada["tronco"] else None
+            resultado = importacao_financeira.gravar(loja, guardada["analise"], conta, plano, plano_tronco)
+            request.session.pop("importacao_fin", None)
+            request.session["importacao_fin_salva"] = {"loja": loja.pk, "arquivo": guardada["arquivo"],
+                                                       "ano": guardada["analise"]["ano"], "resultado": resultado}
+            messages.success(request, "Planilha financeira salva no sistema.")
+            return redirect("importar_financeiro")
+        form = ImportarFinanceiroForm(request.POST, request.FILES, loja=loja)
+        if form.is_valid():
+            d = form.cleaned_data
+            try:
+                analise = importacao_financeira.analisar(loja, d["arquivo"], d["ano"], d["em_branco"], d["incluir_novos"])
+            except importacao.ErroDePlanilha as erro:
+                messages.error(request, str(erro))
+            else:
+                request.session["importacao_fin"] = {"loja": loja.pk, "arquivo": d["arquivo"].name[:120], "analise": analise,
+                                                     "conta": d["conta"].pk, "conta_nome": str(d["conta"]),
+                                                     "tronco": d["importar_tronco"]}
+                return redirect("importar_financeiro")
+    salva = request.session.pop("importacao_fin_salva", None) if not guardada else None
+    if salva and salva.get("loja") != loja.pk:
+        salva = None
+    analise = guardada["analise"] if guardada else None
+    linhas = []
+    if analise:
+        siglas = {"pago": ("P", "ok"), "aberto": ("A", "ruim"), "acordo": ("Ac", "atencao"), "isento": ("R", ""),
+                  "nao_se_aplica": ("—", "")}
+        for o in analise["obreiros"]:
+            curtos = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+            linhas.append({**o, "grade": [(*siglas.get((o["meses"].get(str(m)) or {}).get("situacao"), ("", "")), curtos[m - 1])
+                                          for m in range(1, 13)]})
+    return render(request, "gestao/importar_financeiro.html", {
+        "modulo": "tesouraria", "form": form, "analise": analise, "guardada": guardada, "linhas": linhas, "salva": salva,
+        "etapa": 3 if salva else (2 if analise else 1), "ano_atual": timezone.localdate().year,
+        "meses_curtos": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]})
+
+
+@exige("tesouraria")
+def planilha_financeira(request):
+    try:
+        ano = int(request.GET.get("ano") or timezone.localdate().year)
+    except ValueError:
+        ano = timezone.localdate().year
+    resposta = HttpResponse(importacao_financeira.planilha_da_loja(request.loja, ano),
+                            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    resposta["Content-Disposition"] = f'attachment; filename="controle-financeiro-{ano}.xlsx"'
+    return resposta
 
 
 @exige("tesouraria")

@@ -207,7 +207,8 @@ def gerar_mensalidades(loja, irmaos, plano, valor, primeiro_vencimento, meses, d
                 pulados += 1
                 continue
             criados.append(Lancamento(
-                loja=loja, tipo="R", irmao=irmao, plano=plano, valor=valor, vencimento=vencimento,
+                loja=loja, tipo="R", irmao=irmao, plano=plano, valor=irmao.mensalidade_individual or valor,
+                vencimento=vencimento,
                 competencia=competencia, serie=serie, descricao=f"{descricao} {competencia:%m/%Y}"))
     Lancamento.objects.bulk_create(criados)
     return len(criados), pulados

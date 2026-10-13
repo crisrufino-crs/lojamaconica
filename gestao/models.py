@@ -178,6 +178,14 @@ class Irmao(DaLoja):
     data_filiacao = models.DateField("filiação à Loja", null=True, blank=True)
     foto = models.ImageField(upload_to=caminho_foto, blank=True, validators=[FileExtensionValidator(EXT_IMAGEM)])
     receber_emails = models.BooleanField("recebe e-mails da Loja", default=True)
+    cotizante = models.BooleanField("cotizante", default=True,
+                                    help_text="Desmarque para quem paga a mensalidade em outra Loja (filiado não cotizante).")
+    mensalidade_individual = models.DecimalField(
+        "mensalidade própria (R$)", max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Preencha só se este Irmão paga um valor diferente do padrão da Loja.")
+    centavos = models.DecimalField(
+        "centavos de identificação", max_digits=3, decimal_places=2, null=True, blank=True,
+        help_text="Ex.: 0,07. O Irmão soma esses centavos ao pagar (R$ 180,07), e a Tesouraria sabe quem pagou.")
     observacoes = models.TextField("observações", blank=True)
     extras = models.JSONField(default=dict, blank=True, editable=False)
 

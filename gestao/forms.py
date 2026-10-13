@@ -290,3 +290,23 @@ class NovaLojaForm(forms.ModelForm):
     def clean_master_senha(self):
         validate_password(self.cleaned_data["master_senha"])
         return self.cleaned_data["master_senha"]
+
+
+class ImportarFinanceiroForm(FormSimples):
+    arquivo = forms.FileField(label="Planilha financeira (.xlsx)")
+    ano = forms.IntegerField(label="Ano da planilha", min_value=2000, max_value=2100, initial=lambda: timezone.localdate().year)
+    em_branco = forms.ChoiceField(
+        label="Meses em branco", initial="ignorar",
+        choices=[("ignorar", "Não lançar nada (só os meses marcados entram no sistema)"),
+                 ("aberto", "Lançar como mensalidade em aberto, até o mês atual")])
+    conta = forms.ModelChoiceField(label="Conta onde os pagamentos entram", queryset=ContaBancaria.objects.filter(ativa=True))
+    incluir_novos = forms.BooleanField(label="Incluir no cadastro os Obreiros que não forem encontrados", required=False, initial=True)
+    importar_tronco = forms.BooleanField(label="Importar também o tronco de beneficência (aba Tronco)", required=False, initial=True)
+
+    def clean_arquivo(self):
+        arquivo = self.cleaned_data["arquivo"]
+        if not arquivo.name.lower().endswith(".xlsx"):
+            raise forms.ValidationError("Envie um arquivo do Excel com final .xlsx (Arquivo › Salvar como › Pasta de Trabalho do Excel).")
+        if arquivo.size > 5 * 1024 * 1024:
+            raise forms.ValidationError("A planilha passa de 5 MB.")
+        return arquivo

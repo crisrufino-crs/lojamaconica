@@ -62,6 +62,15 @@ ou o nome da Loja de destino. Na próxima instalação no Render, os Irmãos sã
 Cada planilha é importada uma única vez, então as instalações seguintes não desfazem alterações feitas pelo site.
 Para importar de novo, troque o arquivo. Pelo terminal: `python manage.py importar_irmaos arquivo.xlsx --loja 123 --gravar`.
 
+## Importar a planilha financeira
+
+Em Tesouraria › Importar planilha: escolha o arquivo, o ano, a conta e o que fazer com meses em branco; o sistema
+mostra a verificação (Obreiro por Obreiro, mês a mês) e só grava ao clicar em "Salvar no sistema". Lê a aba de
+mensalidades (Centavos, Nome do Obreiro, Cotizante, R$, JANEIRO…DEZEMBRO com PAGO, REMIDO, Acordo ou XXX-XXX),
+a aba de centavos (CIM, NOME, CENTAVOS) e a aba do tronco. O botão "Baixar planilha no formato da Loja" gera a
+mesma planilha já preenchida com o que está no sistema; ela pode ser editada e enviada de volta sem duplicar nada.
+Relatórios: Controle de mensalidades do ano e Tabela de centavos.
+
 ## O que já funciona e o que depende de contratar/configurar
 
 | Recurso | Situação |

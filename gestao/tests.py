@@ -708,7 +708,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-I")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-J")
 
 
 def importacao_colunas():
@@ -974,3 +974,116 @@ class RenomearLoja(TestCase):
         self.assertEqual((loja.nome, loja.potencia, loja.oriente, loja.uf, str(loja)),
                          ("L'AQUILA ROMANA", "Grande Oriente do Brasil", "São Paulo", "SP", "L'AQUILA ROMANA nº 3365"))
         self.assertTrue(Loja.objects.filter(nome="Cavaleiros do Sul", numero="456").exists())
+
+
+class ImportarFinanceiro(Base):
+    def setUp(self):
+        for irmao, nome in zip(self.irmaos, ["Alfredo Bastos Lima", "Bruno Costa", "Irmão Dois", "Daniel Reis"]):
+            Irmao.objects.filter(pk=irmao.pk).update(nome=nome)
+        Irmao.objects.filter(pk=self.irmaos[3].pk).update(cim="5555")
+
+    def _xlsx(self, abas):
+        import io
+        from openpyxl import Workbook
+        pasta = Workbook()
+        pasta.remove(pasta.active)
+        for titulo, linhas in abas.items():
+            aba = pasta.create_sheet(titulo)
+            for linha in linhas:
+                aba.append(linha)
+        saida = io.BytesIO()
+        pasta.save(saida)
+        return SimpleUploadedFile("controle.xlsx", saida.getvalue())
+
+    def _planilha(self):
+        meses = ["JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"]
+        return self._xlsx({
+            "Mensalidade": [
+                ["Centavos ", "Nome do Obreiro", "Cotizante", "R$", *meses],
+                [0.02, "  ALFREDO BASTOS LIMA   3078 ", "SIM", 180, "PAGO", "PAGO", "Acordo", None, None, None, None, None, None, None, None, None],
+                [0.03, "  BRUNO COSTA", "NÂO", 60, "XXX-XXX", "PAGO", None, None, None, None, None, None, None, None, None, None],
+                [0.04, "  IRMAO DOIS", "SIM", "REMIDO", "REMIDO", "REMIDO", None, None, None, None, None, None, None, None, None, None],
+                [0.05, " Obreiro Novo da Silva (2309)", "SIM", 180, "PAGO", "talvez", None, None, None, None, None, None, None, None, None, None],
+                [0.06, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None],
+            ],
+            "Tronco": [["Tronco de beneficencia"], [None], ["janeiro", None, 150.5], ["fevereiro", None, 0], ["março", None, 99],
+                       ["abril", None, 0], ["maio", None, 0], ["junho", None, 0], ["julho", None, 0], ["agosot", None, 0],
+                       ["setembro", None, 0], ["outubro", None, 0], ["novembro", None, 0], ["dezembro", None, 0]],
+            "Livre": [["Relatório de Centavos"], [None], ["NUMERO", "CIM", "NOME", "CENTAVOS"], [1, 5555, "DANIEL REIS", 0.09], [2, 6666, "Ninguém Daqui", 0]],
+            "Dados": [["texto qualquer"]],
+        })
+
+    def test_importa_verifica_e_salva_sem_duplicar(self):
+        self.entrar(self.tesoureiro)
+        url = reverse("importar_financeiro")
+        dados = {"ano": 2026, "em_branco": "ignorar", "conta": self.caixa.pk, "incluir_novos": "on", "importar_tronco": "on"}
+        pagina = self.client.post(url, {**dados, "arquivo": self._planilha()}, follow=True)
+        self.assertContains(pagina, "Nada foi salvo ainda")
+        self.assertContains(pagina, "“talvez” não reconhecido")
+        analise = self.client.session["importacao_fin"]["analise"]
+        self.assertEqual(analise["abas_ignoradas"], ["Dados"])
+        self.assertEqual(analise["contagem"], {"pago": 4, "acordo": 1, "nao_se_aplica": 1, "isento": 2, "novos": 1})
+        self.assertFalse(Lancamento.objects.exists())  # nada gravado na verificação
+        self.client.post(url, {"acao": "gravar"})
+        i0, i1, i2 = (Irmao.objects.get(pk=i.pk) for i in self.irmaos[:3])
+        self.assertEqual((i0.cotizante, i0.mensalidade_individual, i0.centavos), (True, Decimal("180.00"), Decimal("0.02")))  # Loja cobra 100
+        self.assertEqual((i1.cotizante, i1.mensalidade_individual), (False, Decimal("60.00")))
+        self.assertEqual(i2.situacao, "remido")
+        self.assertEqual(Irmao.objects.get(pk=self.irmaos[3].pk).centavos, Decimal("0.09"))  # veio da aba de centavos (CIM)
+        novo = Irmao.objects.get(nome="Obreiro Novo da Silva")
+        self.assertEqual((novo.loja, novo.centavos), (self.loja, Decimal("0.05")))
+        mens = Lancamento.objects.filter(plano=self.plano["1.1"])
+        self.assertEqual(mens.filter(status="pago").count(), 4)
+        self.assertEqual(mens.filter(irmao=self.irmaos[1], status="pago").get().valor_pago, Decimal("60.00"))
+        acordo = mens.get(status="aberto")
+        self.assertEqual((acordo.irmao, acordo.competencia), (self.irmaos[0], date(2026, 3, 1)))
+        self.assertEqual(servicos.saldo_conta(self.caixa), Decimal("180") * 3 + Decimal("60") + Decimal("150.50") + Decimal("99"))
+        self.assertEqual(Lancamento.objects.filter(plano=self.plano["1.3"]).count(), 2)
+        self.loja.refresh_from_db()
+        self.assertEqual(self.loja.valor_mensalidade, Decimal("100"))  # a Loja já tinha valor padrão: não muda
+        # mesma planilha de novo: nada duplica
+        total = Lancamento.objects.count()
+        self.client.post(url, {**dados, "arquivo": self._planilha()})
+        self.client.post(url, {"acao": "gravar"})
+        self.assertEqual(Lancamento.objects.count(), total)
+        self.assertEqual(Irmao.objects.filter(nome="Obreiro Novo da Silva").count(), 1)
+
+    def test_meses_em_branco_em_aberto_e_planilha_da_loja_volta_igual(self):
+        from openpyxl import load_workbook
+        import io
+        self.entrar(self.tesoureiro)
+        url = reverse("importar_financeiro")
+        hoje = timezone.localdate()
+        self.client.post(url, {"ano": hoje.year, "em_branco": "aberto", "conta": self.caixa.pk, "arquivo": self._planilha()})
+        analise = self.client.session["importacao_fin"]["analise"]
+        self.assertEqual(analise["ate_mes"], hoje.month)
+        self.assertGreater(analise["contagem"]["aberto"], 0)
+        self.client.post(url, {"acao": "gravar"})
+        self.assertFalse(Irmao.objects.filter(nome="Obreiro Novo da Silva").exists())  # "incluir novos" desmarcado
+        baixada = self.client.get(reverse("planilha_financeira"), {"ano": hoje.year})
+        pasta = load_workbook(io.BytesIO(baixada.content))
+        self.assertEqual(pasta.sheetnames, ["Mensalidade", "Centavos", "Tronco", "Como preencher"])
+        linha = next(r for r in pasta["Mensalidade"].iter_rows(values_only=True) if r[1] == "Alfredo Bastos Lima")
+        self.assertEqual(linha[:7], (0.02, "Alfredo Bastos Lima", None, "SIM", 180, "PAGO", "PAGO"))
+        self.assertEqual(linha[7], "Acordo")
+        total = Lancamento.objects.count()
+        self.client.post(url, {"ano": hoje.year, "em_branco": "ignorar", "conta": self.caixa.pk,
+                               "arquivo": SimpleUploadedFile("volta.xlsx", baixada.content)})
+        self.client.post(url, {"acao": "gravar"})
+        self.assertEqual(Lancamento.objects.count(), total)  # a planilha baixada volta sem duplicar nada
+        from django.db.models import Count as _Count
+        self.assertFalse(Lancamento.objects.filter(plano=self.plano["1.1"]).values("irmao", "competencia")
+                         .annotate(n=_Count("id")).filter(n__gt=1).exists())
+        self.assertContains(self.client.get(reverse("relatorio", args=["mensalidades-ano"]), {"ano": hoje.year}), "Acordo")
+        self.assertContains(self.client.get(reverse("relatorio", args=["centavos"])), "LIVRE")
+
+    def test_arquivo_errado_e_acesso(self):
+        self.entrar(self.tesoureiro)
+        url = reverse("importar_financeiro")
+        base = {"ano": 2026, "em_branco": "ignorar", "conta": self.caixa.pk}
+        r = self.client.post(url, {**base, "arquivo": self._xlsx({"Aba": [["Coluna A"], ["x"]]})}, follow=True)
+        self.assertContains(r, "Não encontrei nenhuma aba no formato esperado")
+        r = self.client.post(url, {**base, "arquivo": SimpleUploadedFile("x.csv", b"a")})
+        self.assertContains(r, ".xlsx")
+        self.entrar(self.secretario)
+        self.assertEqual(self.client.get(url).status_code, 403)

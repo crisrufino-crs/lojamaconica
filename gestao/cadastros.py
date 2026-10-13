@@ -186,7 +186,7 @@ MENUS = {
     "tesouraria": [("A receber", "receber_lista"), ("A pagar", "pagar_lista"),
                    ("Mensalidades em série", "mensalidades_serie"), ("Boletos", "boletos"),
                    ("Transferências", "transferencias_lista"), ("Contas e caixas", "contas_lista"),
-                   ("Plano de contas", "plano-contas_lista")],
+                   ("Plano de contas", "plano-contas_lista"), ("Importar planilha", "importar_financeiro")],
     "chancelaria": [("Sessões e presença", "sessoes_lista"), ("Licenças", "licencas_lista"),
                     ("Certificados de visita", "visitas_lista")],
     "hospitalaria": [("Bens e materiais", "bens_lista"), ("Empréstimos", "emprestimos_lista")],

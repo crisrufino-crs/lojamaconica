@@ -13,6 +13,40 @@
     <a class="botao claro" href="{{ request.GET.voltar|default:voltar }}">Voltar sem salvar</a>
   </div>
 </form>
+<script>
+/* Contas a receber: plano “Remido” sugere R$ 0,00, com atalho para o valor proposto (a mensalidade do Irmão). */
+(function () {
+  var plano = document.querySelector('select[data-planos-remido]'), valor = document.querySelector('input[data-proposto]');
+  if (!plano || !valor) return;
+  var remidos = JSON.parse(plano.dataset.planosRemido || '[]'), porIrmao = JSON.parse(valor.dataset.porIrmao || '{}');
+  var irmao = document.getElementById('id_irmao'), descricao = document.getElementById('id_descricao');
+  var caixa = document.createElement('div');
+  caixa.className = 'filtros'; caixa.style.margin = '4px 0 0'; caixa.style.display = 'none';
+  caixa.innerHTML = '<button type="button" class="botao claro pequeno" data-v="zero">R$ 0,00 (isento)</button>'
+    + '<button type="button" class="botao claro pequeno" data-v="proposto"></button>';
+  valor.after(caixa);
+  var botaoProposto = caixa.querySelector('[data-v=proposto]');
+  function proposto() { return (irmao && porIrmao[irmao.value]) || valor.dataset.proposto || '0'; }
+  function brl(v) { return 'R$ ' + Number(v).toFixed(2).replace('.', ','); }
+  function atualizar(trocouPlano) {
+    var remido = remidos.indexOf(plano.value) > -1;
+    caixa.style.display = remido ? 'flex' : 'none';
+    botaoProposto.textContent = 'Usar o valor proposto (' + brl(proposto()) + ')';
+    if (remido && trocouPlano) {
+      valor.value = '0.00';
+      if (descricao && !descricao.value) descricao.value = 'Isento';
+    }
+  }
+  caixa.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    valor.value = b.dataset.v === 'zero' ? '0.00' : Number(proposto()).toFixed(2);
+    valor.focus();
+  });
+  plano.addEventListener('change', function () { atualizar(true); });
+  if (irmao) irmao.addEventListener('change', function () { atualizar(false); });
+  atualizar(!valor.value);
+})();
+</script>
 {% if script_remidos %}<script>
 /* Mensalidades em série: quem é marcado como Remido sai da lista de quem paga. */
 (function () {

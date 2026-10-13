@@ -96,7 +96,46 @@ class LancamentoForm(FormDaLoja):
 
 
 class ReceberForm(LancamentoForm):
+    """Conta a receber. Com o plano “Remido”, o valor sugerido é R$ 0,00 (isenção), mas pode ser trocado
+    pelo valor proposto (a mensalidade do Irmão) ou por qualquer outro valor."""
     fixos, tipo_plano = {"tipo": "R"}, "R"
+
+    def __init__(self, *args, **kwargs):
+        import json
+        super().__init__(*args, **kwargs)
+        remidos = [str(p.pk) for p in self.fields["plano"].queryset if p.eh_remido]
+        padrao = self.loja.valor_mensalidade or Decimal("0")
+        valores = {str(i.pk): str(i.mensalidade_individual or padrao)
+                   for i in self.fields["irmao"].queryset.only("pk", "mensalidade_individual")}
+        self.fields["plano"].widget.attrs["data-planos-remido"] = json.dumps(remidos)
+        self.fields["valor"].widget.attrs.update({"data-proposto": str(padrao), "data-por-irmao": json.dumps(valores)})
+        self.fields["valor"].help_text = ("Com o plano “Remido”, o valor vem como R$ 0,00 (isento). "
+                                          "Você pode manter R$ 0,00 ou informar o valor proposto.")
+
+    def clean(self):
+        plano = self.cleaned_data.get("plano")
+        if plano is not None and plano.eh_remido:
+            dados = forms.ModelForm.clean(self)
+            if not dados.get("irmao") and not dados.get("favorecido"):
+                self.add_error("favorecido", "Informe o Irmão ou o nome do fornecedor/pagador.")
+            if dados.get("valor") is not None and dados["valor"] < 0:
+                self.add_error("valor", "O valor não pode ser negativo.")
+            if self.instance.pk and self.instance.status == "pago":
+                raise forms.ValidationError("Este lançamento já está quitado. Estorne a quitação antes de alterar.")
+            return dados
+        return super().clean()
+
+    def save(self, commit=True):
+        l = self.instance
+        if l.status in ("aberto", "isento"):
+            if l.plano_id and l.plano.eh_remido and not l.valor:
+                # R$ 0,00 no plano Remido: isenção registrada, não é dívida
+                l.status, l.valor, l.valor_pago = "isento", Decimal("0"), Decimal("0")
+                if not l.observacao:
+                    l.observacao = "Remido: isento de mensalidade"
+            else:
+                l.status, l.valor_pago = "aberto", None
+        return super().save(commit)
 
 
 class PagarForm(LancamentoForm):

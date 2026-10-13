@@ -708,7 +708,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-O")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-P")
 
 
 def importacao_colunas():
@@ -1256,3 +1256,31 @@ class RemidoComValorZero(Base):
         pasta = load_workbook(io.BytesIO(self.client.get(reverse("planilha_financeira")).content))
         linha = next(l for l in pasta["Mensalidade"].iter_rows(values_only=True) if l[1] == "Irmão 0")
         self.assertEqual((linha[4], linha[5]), (0, "REMIDO"))
+
+
+class LancamentoRemido(Base):
+    def test_remido_aceita_zero_ou_valor_proposto(self):
+        remido = PlanoConta.objects.get(loja=self.loja, codigo="1.6")
+        self.entrar(self.tesoureiro)
+        url = reverse("receber_novo")
+        pagina = self.client.get(url)
+        self.assertContains(pagina, "data-planos-remido")
+        self.assertContains(pagina, 'data-proposto="100')
+        base = {"descricao": "Isento", "irmao": self.irmaos[0].pk, "plano": remido.pk, "vencimento": "2026-11-10"}
+        self.client.post(url, {**base, "valor": "0"})
+        isento = Lancamento.objects.get()
+        self.assertEqual((isento.status, isento.valor, isento.valor_pago), ("isento", D("0"), D("0")))
+        self.client.post(url, {**base, "descricao": "Mensalidade 11/2026", "valor": "100"})  # valor proposto
+        aberto = Lancamento.objects.get(valor=D("100"))
+        self.assertEqual(aberto.status, "aberto")
+        # alterar o isento para um valor faz dele uma conta em aberto; voltar a 0 o torna isento de novo
+        self.client.post(reverse("receber_editar", args=[isento.pk]), {**base, "valor": "80"})
+        isento.refresh_from_db()
+        self.assertEqual((isento.status, isento.valor), ("aberto", D("80")))
+        self.client.post(reverse("receber_editar", args=[isento.pk]), {**base, "valor": "0"})
+        isento.refresh_from_db()
+        self.assertEqual(isento.status, "isento")
+        # fora do plano Remido, zero continua proibido
+        r = self.client.post(url, {**base, "plano": self.plano["1.1"].pk, "valor": "0"})
+        self.assertContains(r, "O valor precisa ser maior que zero")
+        self.assertEqual(servicos.saldo_conta(self.caixa), D("0"))

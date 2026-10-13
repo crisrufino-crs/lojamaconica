@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django import forms
 from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
@@ -143,7 +145,8 @@ class MensalidadesForm(FormSimples):
     plano = forms.ModelChoiceField(label="Plano de contas", queryset=PlanoConta.objects.filter(tipo="R", aceita_lancamento=True))
     descricao = forms.CharField(label="Descrição", initial="Mensalidade", max_length=100,
                                 help_text="O mês de referência é acrescentado automaticamente.")
-    valor = forms.DecimalField(label="Valor de cada mensalidade", max_digits=10, decimal_places=2, min_value=0.01)
+    valor = forms.DecimalField(label="Valor de cada mensalidade", max_digits=10, decimal_places=2, min_value=0,
+                               required=False, help_text="Não é preciso preencher quando o plano de contas é “Remido”.")
     primeiro_vencimento = forms.DateField(label="Primeiro vencimento")
     meses = forms.IntegerField(label="Quantidade de meses", min_value=1, max_value=24, initial=12)
     irmaos = forms.ModelMultipleChoiceField(
@@ -164,9 +167,21 @@ class MensalidadesForm(FormSimples):
     def clean(self):
         dados = super().clean()
         remidos = set(dados.get("remidos") or [])
+        plano = dados.get("plano")
+        if plano is not None and plano.eh_remido:
+            # Plano "Remido": registra a isenção (descrição "Isento", sem valor a pagar) para os Remidos marcados
+            dados["valor"] = Decimal("0")
+            if not dados.get("descricao") or dados["descricao"].strip().lower() == "mensalidade":
+                dados["descricao"] = "Isento"
+            dados["irmaos"] = sorted(remidos, key=lambda i: i.nome)
+            if not dados["irmaos"]:
+                self.add_error("remidos", "Com o plano “Remido”, marque na lista de Remidos quem fica isento.")
+            return dados
         dados["irmaos"] = [i for i in (dados.get("irmaos") or []) if i not in remidos]  # remido nunca é cobrado
         if not dados["irmaos"] and "irmaos" not in self.errors:
             self.add_error("irmaos", "Marque pelo menos um Irmão que paga mensalidade.")
+        if dados.get("valor") in (None, Decimal("0")) and "valor" not in self.errors:
+            self.add_error("valor", "Informe o valor de cada mensalidade.")
         return dados
 
 

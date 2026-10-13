@@ -481,11 +481,11 @@ def mensalidades_ano(loja, f):
     plano = PlanoConta.objects.filter(loja=loja, codigo="1.1").first()
     lancs = Lancamento.objects.filter(loja=loja, tipo="R", irmao__isnull=False, competencia__year=ano).exclude(status="cancelado")
     if plano:
-        lancs = lancs.filter(plano=plano)
+        lancs = lancs.filter(Q(plano=plano) | Q(status="isento"))
     mapa = {}
-    for l in lancs:
-        mapa[(l.irmao_id, l.competencia.month)] = "Pago" if l.status == "pago" else (
-            "Acordo" if "acordo" in l.observacao.lower() else ("Vencido" if l.vencido else "Aberto"))
+    for l in lancs.order_by("status"):  # "isento" é gravado por último e prevalece no mês
+        mapa[(l.irmao_id, l.competencia.month)] = "Pago" if l.status == "pago" else ("Isento" if l.status == "isento" else (
+            "Acordo" if "acordo" in l.observacao.lower() else ("Vencido" if l.vencido else "Aberto")))
     irmaos = sorted(Irmao.objects.filter(loja=loja, situacao__in=Irmao.NO_QUADRO),
                     key=lambda i: (i.centavos is None, i.centavos or 0, i.nome))
     linhas, pagos_mes = [], [0] * 12
@@ -493,7 +493,7 @@ def mensalidades_ano(loja, f):
         remido = i.situacao == "remido"
         meses = []
         for m in range(1, 13):
-            valor = "Remido" if remido else mapa.get((i.pk, m), "")
+            valor = mapa.get((i.pk, m), "") if mapa.get((i.pk, m)) in ("Isento", "Pago") or not remido else "Remido"
             pagos_mes[m - 1] += valor == "Pago"
             meses.append(valor or None)
         linhas.append(Linha([f"{i.centavos:.2f}".replace(".", ",") if i.centavos is not None else None, i.nome,

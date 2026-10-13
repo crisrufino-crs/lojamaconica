@@ -708,7 +708,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-L")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-M")
 
 
 def importacao_colunas():
@@ -1174,3 +1174,45 @@ class MensalidadesComRemidos(Base):
                                                  D("100"), date(2026, 11, 10), 2)
         self.assertEqual(criados, 6)
         self.assertFalse(Lancamento.objects.filter(irmao=self.irmaos[0]).exists())
+
+
+class PlanoRemidoIsento(Base):
+    def test_plano_remido_lanca_isento_sem_valor_e_cancela_aberto(self):
+        remido = PlanoConta.objects.get(loja=self.loja, codigo="1.6")
+        self.assertTrue(remido.eh_remido)
+        Irmao.objects.filter(pk=self.irmaos[0].pk).update(situacao="remido")
+        aberta = self.receber(self.irmaos[0], vencimento=date(2026, 11, 10), competencia=date(2026, 11, 1))
+        self.entrar(self.tesoureiro)
+        url = reverse("mensalidades_serie")
+        self.assertContains(self.client.get(url), "Remido (isenção de mensalidade)")
+        base = {"plano": remido.pk, "descricao": "Mensalidade", "valor": "", "meses": 2, "primeiro_vencimento": "2026-11-10",
+                "irmaos": [self.irmaos[1].pk]}
+        r = self.client.post(url, base)  # nenhum Remido marcado
+        self.assertContains(r, "marque na lista de Remidos")
+        self.client.post(url, {**base, "remidos": [self.irmaos[0].pk]})  # sem valor: não é obrigatório
+        isentos = Lancamento.objects.filter(status="isento").order_by("competencia")
+        self.assertEqual([(l.irmao, l.descricao, l.valor) for l in isentos],
+                         [(self.irmaos[0], "Isento 11/2026", D("0")), (self.irmaos[0], "Isento 12/2026", D("0"))])
+        self.assertFalse(Lancamento.objects.filter(irmao=self.irmaos[1]).exists())  # só os Remidos marcados
+        aberta.refresh_from_db()
+        self.assertEqual(aberta.status, "cancelado")
+        self.assertEqual(servicos.saldo_conta(self.caixa), D("0"))
+        # isento não aparece como dívida, mas pode ser consultado pelo filtro
+        r = self.client.get(reverse("receber_lista"), {"ano": "2026", "situacao": "aberto", "ver": "irmao"})
+        self.assertEqual(r.context["resumo"], [])
+        r = self.client.get(reverse("receber_lista"), {"ano": "2026", "situacao": "isento", "ver": "lista"})
+        self.assertEqual(len(r.context["linhas"]), 2)
+        self.assertContains(self.client.get(reverse("relatorio", args=["mensalidades-ano"]), {"ano": 2026}), "Isento")
+        # sem o plano Remido, o valor continua obrigatório
+        r = self.client.post(url, {**base, "plano": self.plano["1.1"].pk, "remidos": []})
+        self.assertContains(r, "Informe o valor de cada mensalidade")
+
+    def test_lojas_existentes_ganham_a_conta_remido(self):
+        from importlib import import_module
+        from django.apps import apps as registro
+        migracao = import_module("gestao.migrations.0008_plano_remido")
+        PlanoConta.objects.filter(loja=self.outra, codigo="1.6").delete()
+        migracao.criar_plano_remido(registro, None)
+        migracao.criar_plano_remido(registro, None)
+        self.assertEqual(PlanoConta.objects.filter(loja=self.outra, nome__startswith="Remido").count(), 1)
+        self.assertEqual(PlanoConta.objects.filter(loja=self.loja, nome__startswith="Remido").count(), 1)

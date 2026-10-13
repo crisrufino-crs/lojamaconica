@@ -28,6 +28,39 @@
   }
   document.querySelectorAll('input[name=remidos]').forEach(function (r) { r.addEventListener('change', sincronizar); });
   sincronizar();
+  /* Plano de contas "Remido": descrição vira "Isento", sem valor a pagar, e vale só para a lista de Remidos. */
+  var plano = document.getElementById('id_plano'), descricao = document.getElementById('id_descricao'),
+      valor = document.getElementById('id_valor'), pagantes = document.querySelector('input[name=irmaos]');
+  if (!plano) return;
+  var anterior = {descricao: descricao.value, valor: valor.value};
+  function planoRemido() {
+    var texto = (plano.options[plano.selectedIndex] || {}).text || '';
+    texto = texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    return /\bremido|isencao/.test(texto);
+  }
+  function aplicarPlano() {
+    var remido = planoRemido();
+    if (remido) {
+      if (descricao.value !== 'Isento') { anterior.descricao = descricao.value; }
+      if (valor.value) { anterior.valor = valor.value; }
+      descricao.value = 'Isento'; valor.value = '';
+    } else if (descricao.value === 'Isento') {
+      descricao.value = anterior.descricao || 'Mensalidade'; valor.value = anterior.valor || '';
+    }
+    valor.closest('.campo').style.display = remido ? 'none' : '';
+    if (pagantes) pagantes.closest('.campo').style.display = remido ? 'none' : '';
+    var aviso = document.getElementById('aviso-remido');
+    if (aviso) aviso.style.display = remido ? '' : 'none';
+    var botao = plano.form.querySelector('.rodape-form button.botao');
+    if (botao) botao.textContent = remido ? 'Lançar isenção dos Remidos' : 'Lançar mensalidades';
+  }
+  var nota = document.createElement('div');
+  nota.id = 'aviso-remido'; nota.className = 'nota-aviso'; nota.style.gridColumn = '1 / -1'; nota.style.display = 'none';
+  nota.innerHTML = '<b>Plano “Remido”:</b> lança a isenção (“Isento”, sem valor a pagar) para cada Irmão marcado na lista de Remidos, '
+    + 'nos meses escolhidos. Mensalidades em aberto desses Irmãos nesses meses são canceladas.';
+  plano.closest('.campo').after(nota);
+  plano.addEventListener('change', aplicarPlano);
+  aplicarPlano();
 })();
 </script>{% endif %}
 {% endblock %}

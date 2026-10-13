@@ -391,6 +391,10 @@ def mensalidades_serie(request):
         criados, pulados = servicos.gerar_mensalidades(loja, pagantes, d["plano"], d["valor"],
                                                        d["primeiro_vencimento"], d["meses"], d["descricao"])
         aviso = f" {pulados} já existiam e foram mantidos como estavam." if pulados else ""
+        if d["plano"].eh_remido:
+            messages.success(request, f"{criados} registro(s) de isenção (“{d['descricao']}”, sem valor a pagar) lançado(s) "
+                                      f"para {len(pagantes)} Remido(s).{aviso}")
+            return redirect("receber_lista")
         isentos = f" {len(marcados)} remido(s) ficaram isentos." if marcados else ""
         mudancas = (f" {novos_remidos} Irmão(s) passaram a Remido" if novos_remidos else "") + (
             f"{';' if novos_remidos else ''} {deixaram} deixaram de ser Remido" if deixaram else "")

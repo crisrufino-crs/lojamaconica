@@ -380,10 +380,17 @@ class PlanoConta(DaLoja):
     def nivel(self):
         return self.codigo.count(".")
 
+    @property
+    def eh_remido(self):
+        """Conta usada para registrar a isenção dos Remidos (lançamento sem valor a pagar)."""
+        import unicodedata
+        nome = unicodedata.normalize("NFKD", self.nome).encode("ascii", "ignore").decode().lower()
+        return nome.startswith("remido") or "isencao" in nome
+
 
 class Lancamento(DaLoja):
     TIPOS = [("R", "A receber"), ("P", "A pagar")]
-    STATUS = [("aberto", "Em aberto"), ("pago", "Quitado"), ("cancelado", "Cancelado")]
+    STATUS = [("aberto", "Em aberto"), ("pago", "Quitado"), ("isento", "Isento"), ("cancelado", "Cancelado")]
     tipo = models.CharField(max_length=1, choices=TIPOS)
     descricao = models.CharField("descrição", max_length=150)
     irmao = models.ForeignKey(Irmao, models.PROTECT, null=True, blank=True, related_name="lancamentos",

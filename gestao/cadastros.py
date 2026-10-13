@@ -100,7 +100,8 @@ QUEM = Coalesce(NullIf("irmao__nome", Value("")), "favorecido")  # "De / para": 
 class RecursoReceber(Recurso):
     """Contas a receber vistas por ano e por filtro, com resumo dos débitos por Irmão (em vez de uma lista corrida)."""
     SITUACOES = [("aberto", "Em aberto (todos)"), ("vencido", "Vencidos"), ("a_vencer", "A vencer"),
-                 ("pago", "Quitados"), ("cancelado", "Cancelados"), ("todos", "Todas as situações")]
+                 ("pago", "Quitados"), ("isento", "Isentos (remidos)"), ("cancelado", "Cancelados"),
+                 ("todos", "Todas as situações")]
     VISOES = [("irmao", "Débitos por Irmão (resumo)"), ("lista", "Lançamentos um a um")]
 
     def _escolhas(self, request, parametros):
@@ -135,7 +136,7 @@ class RecursoReceber(Recurso):
             qs = qs.filter(status="aberto", vencimento__lt=hoje)
         elif situacao == "a_vencer":
             qs = qs.filter(status="aberto", vencimento__gte=hoje)
-        elif situacao in ("aberto", "pago", "cancelado"):
+        elif situacao in ("aberto", "pago", "isento", "cancelado"):
             qs = qs.filter(status=situacao)
         return qs, termo, extras + filtros
 

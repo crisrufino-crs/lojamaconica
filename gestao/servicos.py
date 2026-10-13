@@ -21,7 +21,8 @@ GRAUS_PADRAO = ["Aprendiz", "Companheiro", "Mestre", "Mestre Instalado"]
 PLANO_PADRAO = [
     ("1", "RECEITAS", "R", False), ("1.1", "Mensalidades", "R", True), ("1.2", "Joias e taxas de iniciação", "R", True),
     ("1.3", "Tronco de beneficência", "R", True), ("1.4", "Eventos e jantares", "R", True),
-    ("1.5", "Doações recebidas", "R", True), ("1.9", "Outras receitas", "R", True),
+    ("1.5", "Doações recebidas", "R", True), ("1.6", "Remido (isenção de mensalidade)", "R", True),
+    ("1.9", "Outras receitas", "R", True),
     ("2", "DESPESAS", "D", False), ("2.1", "Taxas da Potência", "D", True), ("2.2", "Aluguel e condomínio", "D", True),
     ("2.3", "Água, luz e internet", "D", True), ("2.4", "Manutenção do Templo", "D", True),
     ("2.5", "Material ritualístico e de expediente", "D", True), ("2.6", "Beneficência e filantropia", "D", True),
@@ -203,16 +204,27 @@ def gerar_mensalidades(loja, irmaos, plano, valor, primeiro_vencimento, meses, d
         vencimento = somar_meses(primeiro_vencimento, n)
         competencia = vencimento.replace(day=1)
         for irmao in irmaos:
-            if irmao.situacao == "remido":  # remido é isento de mensalidade
+            if irmao.situacao == "remido" and not plano.eh_remido:  # remido é isento de mensalidade
                 continue
             if (irmao.pk, competencia) in ja_existem:
                 pulados += 1
+                continue
+            if plano.eh_remido:  # registro da isenção: sem valor a pagar, não entra como dívida
+                criados.append(Lancamento(
+                    loja=loja, tipo="R", irmao=irmao, plano=plano, valor=Decimal("0"), valor_pago=Decimal("0"),
+                    status="isento", vencimento=vencimento, competencia=competencia, serie=serie,
+                    descricao=f"{descricao} {competencia:%m/%Y}", observacao="Remido: isento de mensalidade"))
                 continue
             criados.append(Lancamento(
                 loja=loja, tipo="R", irmao=irmao, plano=plano, valor=irmao.mensalidade_individual or valor,
                 vencimento=vencimento,
                 competencia=competencia, serie=serie, descricao=f"{descricao} {competencia:%m/%Y}"))
     Lancamento.objects.bulk_create(criados)
+    if plano.eh_remido and criados:
+        # quem ficou isento nesses meses não deve mais as mensalidades em aberto desses mesmos meses
+        for l in criados:
+            Lancamento.objects.filter(loja=loja, irmao=l.irmao, tipo="R", status="aberto", competencia=l.competencia) \
+                .exclude(plano=plano).update(status="cancelado", observacao="Cancelada: Irmão remido (isento)")
     return len(criados), pulados
 
 

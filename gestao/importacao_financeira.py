@@ -18,6 +18,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from . import servicos
@@ -478,10 +479,11 @@ def planilha_da_loja(loja, ano):
     plano = PlanoConta.objects.filter(loja=loja, codigo="1.1").first()
     lancs = Lancamento.objects.filter(loja=loja, tipo="R", irmao__isnull=False, competencia__year=ano).exclude(status="cancelado")
     if plano:
-        lancs = lancs.filter(plano=plano)
+        lancs = lancs.filter(Q(plano=plano) | Q(status="isento"))
     situacao = {}
     for l in lancs:
-        texto = "PAGO" if l.status == "pago" else ("Acordo" if "acordo" in l.observacao.lower() else "")
+        texto = "PAGO" if l.status == "pago" else ("REMIDO" if l.status == "isento" else (
+            "Acordo" if "acordo" in l.observacao.lower() else ""))
         situacao[(l.irmao_id, l.competencia.month)] = texto
     irmaos = sorted(Irmao.objects.filter(loja=loja, situacao__in=Irmao.NO_QUADRO),
                     key=lambda i: (i.centavos is None, i.centavos or 0, i.nome))

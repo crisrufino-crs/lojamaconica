@@ -234,8 +234,10 @@ def importar_irmaos(request):
                 return redirect("importar_irmaos")
             criados, atualizados = importacao.gravar(loja, guardada["analise"])
             request.session.pop("importacao", None)
+            request.session["importacao_salva"] = {"loja": loja.pk, "arquivo": guardada.get("arquivo"), "criados": criados,
+                                                   "atualizados": atualizados, "recusados": len(guardada["analise"]["erros"])}
             messages.success(request, f"Importação concluída: {criados} Irmão(s) incluído(s) e {atualizados} atualizado(s).")
-            return redirect("irmaos_lista")
+            return redirect("importar_irmaos")
         arquivo = request.FILES.get("arquivo")
         if not arquivo:
             messages.error(request, "Escolha a planilha antes de enviar.")
@@ -254,7 +256,11 @@ def importar_irmaos(request):
                 return redirect("importar_irmaos")
     if guardada:
         analise = guardada["analise"]
+    salva = request.session.pop("importacao_salva", None) if not guardada else None
+    if salva and salva.get("loja") != loja.pk:
+        salva = None
     return render(request, "gestao/importar.html", {
+        "salva": salva, "etapa": 3 if salva else (2 if analise else 1),
         "modulo": "secretaria", "analise": analise, "arquivo_nome": guardada and guardada.get("arquivo"),
         "amostra": analise and [{**r, "nascimento": "/".join(reversed(r["dados"]["data_nascimento"].split("-")))
                                  if r["dados"].get("data_nascimento") else ""} for r in analise["registros"][:15]]})

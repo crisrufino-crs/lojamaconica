@@ -37,7 +37,7 @@ class Command(BaseCommand):
         Usuario.objects.create(username=ADMIN_LOGIN, password=ADMIN_SENHA_HASH, email="", first_name="Cristiano",
                                is_superuser=True, is_staff=True)
         loja = Loja.objects.create(
-            nome="A∴R∴L∴S∴ Fraternidade e Luz", numero="123", potencia="Grande Oriente Exemplo", rito="R∴E∴A∴A∴",
+            nome="L'AQUILA ROMANA", numero="3365", potencia="Grande Oriente do Brasil", rito="R∴E∴A∴A∴",
             oriente="São Paulo", uf="SP", cnpj="00.000.000/0001-91", email="secretaria@fraternidadeeluz.exemplo.com.br",
             dia_sessao=1, horario_sessao=time(20, 0), valor_mensalidade=Decimal("180.00"), dia_vencimento=10)
         servicos.preparar_loja(loja)
@@ -179,7 +179,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"Dados de exemplo criados. Senha dos usuários de exemplo: {SENHA}\n"
             "  Cristiano    → Administrador de todas as Lojas (senha própria, definida à parte)\n"
-            "  veneravel    → usuário Master da Loja Fraternidade e Luz\n"
+            "  veneravel    → usuário Master da Loja L'AQUILA ROMANA nº 3365\n"
             "  secretario, tesoureiro, chanceler, hospitaleiro → cada um só no seu módulo\n"
             "  irmao        → Irmão comum (só os próprios dados)\n"
             "  master.sul   → Master da segunda Loja (Cavaleiros do Sul)"))

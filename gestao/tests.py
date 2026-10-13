@@ -708,7 +708,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-H")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-I")
 
 
 def importacao_colunas():
@@ -959,3 +959,18 @@ class ComandosDeImportacao(Base):
             irmao.refresh_from_db()
             self.assertEqual(irmao.celular, "(11) 95555-5555")
             self.assertEqual(Irmao.objects.filter(nome="Irmão Carga").count(), 1)
+
+
+class RenomearLoja(TestCase):
+    def test_migracao_renomeia_a_loja_123(self):
+        from importlib import import_module
+        from django.apps import apps as registro
+        migracao = import_module("gestao.migrations.0006_loja_laquila_romana")
+        Loja.objects.create(nome="A∴R∴L∴S∴ Fraternidade e Luz", numero="123", potencia="Grande Oriente Exemplo", oriente="X")
+        Loja.objects.create(nome="Cavaleiros do Sul", numero="456")
+        migracao.renomear(registro, None)
+        migracao.renomear(registro, None)  # rodar de novo não muda nada
+        loja = Loja.objects.get(numero="3365")
+        self.assertEqual((loja.nome, loja.potencia, loja.oriente, loja.uf, str(loja)),
+                         ("L'AQUILA ROMANA", "Grande Oriente do Brasil", "São Paulo", "SP", "L'AQUILA ROMANA nº 3365"))
+        self.assertTrue(Loja.objects.filter(nome="Cavaleiros do Sul", numero="456").exists())

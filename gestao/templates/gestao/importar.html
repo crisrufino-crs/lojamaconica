@@ -1,43 +1,87 @@
 {% extends "gestao/base.html" %}{% load gestao_tags %}
 {% block titulo %}Importar planilha{% endblock %}
 {% block conteudo %}
-<div class="cabecalho"><div><h1>Importar Irmãos do Excel</h1><p class="suave">Envie a planilha, confira o resultado na tela e só então grave. Nada é alterado antes da sua confirmação.</p></div>
+<style>
+.etapas{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:16px;counter-reset:etapa}
+.etapa{background:var(--card);border:1px solid var(--borda);border-radius:12px;padding:12px 16px;display:flex;gap:12px;align-items:center;color:var(--suave)}
+.etapa b{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--cabecalho-tabela);color:var(--suave);flex:none}
+.etapa.atual{border-color:var(--primaria);color:var(--texto);font-weight:600}.etapa.atual b{background:var(--primaria);color:var(--sobre-primaria)}
+.etapa.feita b{background:var(--sucesso);color:#fff}
+.escolher{display:flex;gap:12px;align-items:center;flex-wrap:wrap;border:2px dashed var(--borda);border-radius:12px;padding:24px;background:var(--fundo)}
+.escolher input[type=file]{position:absolute;width:1px;height:1px;opacity:0}
+.escolher .nome-arquivo{color:var(--suave)}
+.escolher.com-arquivo{border-color:var(--primaria);background:#fff}.escolher.com-arquivo .nome-arquivo{color:var(--texto);font-weight:600}
+@media (max-width:768px){.etapas{grid-template-columns:1fr}}
+</style>
+<div class="cabecalho"><div><h1>Importar Irmãos do Excel</h1><p class="suave">Escolha o arquivo, verifique o que o sistema encontrou e salve. Nada é alterado antes de você clicar em “Salvar no cadastro”.</p></div>
   <div class="acoes"><a class="botao claro" href="{% url 'importar_modelo' %}">Baixar planilha modelo</a></div></div>
-{% if not analise %}
-<form method="post" enctype="multipart/form-data" class="card">{% csrf_token %}
-  <h2>1. Escolha a planilha</h2>
-  <div class="campo" style="max-width:520px"><label for="arquivo">Arquivo do Excel (.xlsx)</label><input type="file" name="arquivo" id="arquivo" accept=".xlsx" required></div>
-  <div class="rodape-form"><button class="botao">Enviar e conferir</button></div>
+<div class="etapas" aria-label="Etapas da importação">
+  <div class="etapa {% if etapa == 1 %}atual{% else %}feita{% endif %}"><b>{% if etapa > 1 %}✓{% else %}1{% endif %}</b> Escolher e importar o arquivo</div>
+  <div class="etapa {% if etapa == 2 %}atual{% elif etapa > 2 %}feita{% endif %}"><b>{% if etapa > 2 %}✓{% else %}2{% endif %}</b> Verificar o arquivo</div>
+  <div class="etapa {% if etapa == 3 %}feita atual{% endif %}"><b>{% if etapa == 3 %}✓{% else %}3{% endif %}</b> Salvar no cadastro</div>
+</div>
+
+{% if etapa == 1 %}
+<form method="post" enctype="multipart/form-data" class="card" id="form-arquivo">{% csrf_token %}
+  <h2>1. Escolha a planilha e importe</h2>
+  <label class="escolher" for="arquivo" id="caixa-arquivo">
+    <span class="botao claro">Escolher arquivo</span>
+    <span class="nome-arquivo" id="nome-arquivo">Nenhum arquivo escolhido (.xlsx do Excel)</span>
+    <input type="file" name="arquivo" id="arquivo" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+  </label>
+  <div class="rodape-form"><button class="botao" id="botao-importar" disabled>Importar e verificar o arquivo</button></div>
+  <p class="ajuda" style="margin-top:12px">Nesta etapa o sistema só lê a planilha. Nada é gravado ainda.</p>
 </form>
 <section class="card"><h2>Como a planilha deve ser</h2>
   <p>Uma linha por Irmão, com os títulos na primeira linha. Só a coluna <b>Nome</b> é obrigatória. O sistema reconhece os títulos mesmo com pequenas diferenças (“Nascimento”, “Data de nascimento”, “Dt. Nascimento”).</p>
   <p><b>Colunas aceitas:</b> Nome completo, CIM, Situação, Grau, Cargo, Data de nascimento, CPF, RG, E-mail, Celular, Telefone, Endereço, Bairro, Cidade, UF, CEP, Naturalidade, Profissão, Estado civil, Nome do pai, Nome da mãe, Data de iniciação, Data de elevação, Data de exaltação, Data de instalação, Data de filiação à Loja, Cônjuge, Nascimento do cônjuge, Observações e os campos personalizados da Loja.</p>
   <p class="ajuda">Se o Irmão já existir (mesmo CIM, CPF ou nome), o cadastro é atualizado em vez de duplicado. Célula vazia nunca apaga um dado que já está no sistema.</p>
 </section>
-{% else %}
+<script>
+(function () {
+  var campo = document.getElementById('arquivo'), nome = document.getElementById('nome-arquivo'),
+      caixa = document.getElementById('caixa-arquivo'), botao = document.getElementById('botao-importar');
+  campo.addEventListener('change', function () {
+    var arquivo = campo.files[0];
+    nome.textContent = arquivo ? arquivo.name : 'Nenhum arquivo escolhido (.xlsx do Excel)';
+    caixa.classList.toggle('com-arquivo', !!arquivo); botao.disabled = !arquivo;
+  });
+  document.getElementById('form-arquivo').addEventListener('submit', function () { botao.disabled = true; botao.textContent = 'Importando e verificando…'; });
+})();
+</script>
+
+{% elif etapa == 2 %}
+<div class="mensagem error" style="font-size:16px"><b>Os Irmãos ainda NÃO foram salvos.</b> Verifique o resumo abaixo e clique em <b>“Salvar no cadastro”</b> para concluir.</div>
 <div class="grade">
   <div class="card cartao-numero"><div class="rotulo">Serão incluídos</div><div class="valor">{{ analise.novos }}</div><div class="nota">Irmãos novos</div></div>
   <div class="card cartao-numero"><div class="rotulo">Serão atualizados</div><div class="valor">{{ analise.atualizados }}</div><div class="nota">já existem no cadastro</div></div>
   <div class="card cartao-numero"><div class="rotulo">Linhas recusadas</div><div class="valor">{{ analise.erros|length }}</div><div class="nota">ficam de fora; veja o motivo abaixo</div></div>
 </div>
-<div class="mensagem error" style="font-size:16px"><b>Atenção: os Irmãos ainda NÃO foram gravados.</b> Confira o resumo abaixo e clique no botão <b>“Gravar”</b> para concluir a importação.</div>
-<section class="card"><h2>2. Confira: {{ arquivo_nome }}</h2>
+<section class="card"><h2>2. Verificação do arquivo: {{ arquivo_nome }}</h2>
   <p><b>Colunas reconhecidas:</b> {% for original, destino in analise.colunas %}{{ original }}{% if original != destino %} → {{ destino }}{% endif %}{% if not forloop.last %}; {% endif %}{% endfor %}.</p>
-  {% if analise.ignoradas %}<div class="nota-aviso"><b>Colunas ignoradas</b> (o sistema não tem onde guardar): {{ analise.ignoradas|join:"; " }}. Para aproveitá-las, crie um campo com o mesmo nome em Administração › Campos personalizados e envie a planilha de novo.</div>{% endif %}
-  <form method="post" class="rodape-form" style="margin-top:8px">{% csrf_token %}
-    <button class="botao" name="acao" value="gravar"{% if not analise.registros %} disabled{% endif %}>Gravar {{ analise.registros|length }} Irmão(s)</button>
-    <button class="botao claro" name="acao" value="cancelar">Cancelar e enviar outra planilha</button>
+  {% if analise.ignoradas %}<div class="nota-aviso"><b>Colunas ignoradas</b> (o sistema não tem onde guardar): {{ analise.ignoradas|join:"; " }}. Para aproveitá-las, crie um campo com o mesmo nome em Administração › Campos personalizados e importe de novo.</div>{% endif %}
+  <form method="post" class="rodape-form" style="margin-top:8px" id="form-salvar">{% csrf_token %}
+    <button class="botao" name="acao" value="gravar" id="botao-salvar"{% if not analise.registros %} disabled{% endif %}>Salvar no cadastro ({{ analise.registros|length }} Irmão{{ analise.registros|length|pluralize:"s" }})</button>
+    <button class="botao claro" name="acao" value="cancelar">Cancelar e escolher outro arquivo</button>
   </form>
 </section>
 {% if analise.erros %}<h2 style="margin-top:32px">Linhas recusadas</h2>
 <div class="card justo"><div class="rolagem"><table><thead><tr><th>Linha do Excel</th><th>Nome</th><th>Motivo</th></tr></thead><tbody>
   {% for e in analise.erros %}<tr class="atrasado"><td>{{ e.linha }}</td><td>{{ e.nome|default:"—" }}</td><td>{{ e.problemas|join:"; " }}</td></tr>{% endfor %}
 </tbody></table></div></div>
-<p class="ajuda">Corrija essas linhas na planilha e envie de novo, ou grave assim mesmo: elas simplesmente ficam de fora.</p>{% endif %}
-{% if amostra %}<h2 style="margin-top:32px">Amostra do que será gravado{% if analise.registros|length > 15 %} (15 primeiros){% endif %}</h2>
+<p class="ajuda">Corrija essas linhas na planilha e importe de novo, ou salve assim mesmo: elas simplesmente ficam de fora.</p>{% endif %}
+{% if amostra %}<h2 style="margin-top:32px">Amostra do que será salvo{% if analise.registros|length > 15 %} (15 primeiros){% endif %}</h2>
 <div class="card justo"><div class="rolagem"><table><thead><tr><th>Linha</th><th>Nome</th><th>CIM</th><th>Nascimento</th><th>E-mail</th><th>Celular</th><th>O que acontece</th></tr></thead><tbody>
   {% for r in amostra %}<tr><td>{{ r.linha }}</td><td>{{ r.dados.nome }}</td><td>{{ r.dados.cim|default:"—" }}</td><td>{{ r.nascimento|default:"—" }}</td><td>{{ r.dados.email|default:"—" }}</td><td>{{ r.dados.celular|default:"—" }}</td>
     <td>{% if r.pk %}{% selo "atualiza" "atencao" %}{% else %}{% selo "inclui" "ok" %}{% endif %}</td></tr>{% endfor %}
 </tbody></table></div></div>{% endif %}
+<script>document.getElementById('form-salvar').addEventListener('submit',function(e){var b=document.getElementById('botao-salvar');if(e.submitter===b){setTimeout(function(){b.disabled=true;b.textContent='Salvando…';},0);}});</script>
+
+{% else %}
+<section class="card" style="border-top:4px solid var(--sucesso)">
+  <h2>3. Salvo no cadastro</h2>
+  <p style="font-size:16px">A planilha <b>{{ salva.arquivo }}</b> foi salva: <b>{{ salva.criados }}</b> Irmão(s) incluído(s) e <b>{{ salva.atualizados }}</b> atualizado(s){% if salva.recusados %}; {{ salva.recusados }} linha(s) recusada(s) ficaram de fora{% endif %}.</p>
+  <div class="rodape-form"><a class="botao" href="{% url 'irmaos_lista' %}">Ver a lista de Irmãos</a><a class="botao claro" href="{% url 'importar_irmaos' %}">Importar outra planilha</a></div>
+</section>
 {% endif %}
 {% endblock %}

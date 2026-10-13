@@ -20,7 +20,7 @@ O comando `demo` cria duas Lojas fictícias. Senha de todos: `loja-demo-2026`
 | Login | O que enxerga |
 |---|---|
 | `Cristiano` | Administrador: todas as Lojas (cria, bloqueia e entra em qualquer uma). Senha própria, não é a de exemplo |
-| `veneravel` | Usuário Master da Loja Fraternidade e Luz (tudo da Loja) |
+| `veneravel` | Usuário Master da Loja L'AQUILA ROMANA nº 3365 (tudo da Loja) |
 | `secretario`, `tesoureiro`, `chanceler`, `hospitaleiro` | Só o módulo do cargo |
 | `irmao` | Irmão comum: só os próprios dados, frequência e boletos |
 | `master.sul` | Master da segunda Loja (para ver que os dados não se misturam) |
@@ -57,7 +57,7 @@ depois da confirmação. Irmão que já existe (mesmo CIM, CPF ou nome) é atual
 
 ## Carga inicial pela instalação (sem usar a tela)
 
-Coloque a planilha (.xlsx, no formato da planilha modelo) na pasta `carga/` e, em `carga/loja.txt`, o número
+Coloque a planilha (.xlsx, no formato da planilha modelo) na pasta `carga/` e, em `carga/loja.txt`, o número (hoje, 3365)
 ou o nome da Loja de destino. Na próxima instalação no Render, os Irmãos são importados automaticamente.
 Cada planilha é importada uma única vez, então as instalações seguintes não desfazem alterações feitas pelo site.
 Para importar de novo, troque o arquivo. Pelo terminal: `python manage.py importar_irmaos arquivo.xlsx --loja 123 --gravar`.

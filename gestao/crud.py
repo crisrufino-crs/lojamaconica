@@ -6,7 +6,8 @@ quatro telas prontas, sempre presas à Loja de quem está usando.
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import ProtectedError, Q
+from django.db.models import CharField, ProtectedError, Q
+from django.db.models.functions import Lower
 from django.forms import modelform_factory
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path, reverse
@@ -20,7 +21,7 @@ RECURSOS = {}
 class Recurso:
     def __init__(self, slug, modelo, modulo, colunas, campos=None, form=None, busca=(), filtros=(), fixos=None,
                  acoes=(), acoes_topo=(), apos_salvar=None, titulo=None, ajuda="", classe_linha=None,
-                 pode_incluir=True, pode_excluir=True, ordem=None, relacionados=(), selecao=None, aviso_exclusao=None):
+                 pode_incluir=True, pode_excluir=True, ordem=None, relacionados=(), selecao=None, aviso_exclusao=None, alfabetica=None):
         self.slug, self.modelo, self.modulo, self.colunas = slug, modelo, modulo, colunas
         self.busca, self.filtros, self.fixos = busca, filtros, fixos or {}
         self.acoes, self.acoes_topo, self.apos_salvar = acoes, acoes_topo, apos_salvar
@@ -32,6 +33,7 @@ class Recurso:
         # têm; a de usuários (Administração) não, para ninguém apagar os acessos por engano.
         self.selecao = selecao or (f"{slug}_excluir_varios" if pode_excluir and modulo != "admin" else None)
         self.aviso_exclusao = aviso_exclusao  # função(consulta) -> texto de alerta mostrado na confirmação
+        self.alfabetica = alfabetica or self._campo_alfabetico()  # campo (ou expressão) usado na ordem alfabética
         self.form = form or modelform_factory(modelo, form=FormDaLoja, fields=campos or "__all__")
         if fixos and not getattr(self.form, "fixos", None):
             self.form = type(f"{modelo.__name__}Form", (self.form,), {"fixos": fixos})
@@ -39,6 +41,43 @@ class Recurso:
             if callable(coluna):  # sem isto o Django tentaria executar a função sozinho ao montar a tela
                 coluna.do_not_call_in_templates = True
         RECURSOS[slug] = self
+
+    ORDENS = [("", "Padrão"), ("az", "Alfabética (A → Z)"), ("za", "Alfabética (Z → A)")]
+
+    def _campo_alfabetico(self):
+        """O campo de texto principal da lista: o primeiro da busca ou a primeira coluna de texto."""
+        candidatos = list(self.busca) + [c.replace(".", "__") for _, c in self.colunas if isinstance(c, str)]
+        for nome in candidatos:
+            modelo, partes = self.modelo, nome.split("__")
+            try:
+                for parte in partes[:-1]:
+                    modelo = modelo._meta.get_field(parte).related_model
+                if isinstance(modelo._meta.get_field(partes[-1]), CharField):
+                    return nome
+            except Exception:
+                continue
+        return None
+
+    def ordenar(self, qs, ordem):
+        """Ordem alfabética de verdade em português: ignora acentos e maiúsculas (Álvaro vem antes de Bruno)."""
+        if ordem not in ("az", "za") or not self.alfabetica:
+            return qs
+        import unicodedata
+        from django.db.models import Case, IntegerField, When
+        expressao = Lower(self.alfabetica)
+        if qs.count() > 3000:  # listas muito grandes: ordem do próprio banco de dados (mais rápida)
+            return qs.order_by(expressao.desc(nulls_last=True) if ordem == "za" else expressao.asc(nulls_last=True), "pk")
+        valores = list(qs.annotate(_alfa=expressao).values_list("pk", "_alfa"))
+        chave = lambda par: (par[1] is None or par[1] == "",  # noqa: E731
+                             unicodedata.normalize("NFKD", par[1] or "").encode("ascii", "ignore").decode(), par[0])
+        valores.sort(key=chave)
+        if ordem == "za":
+            vazios = [v for v in valores if not v[1]]
+            valores = [v for v in valores if v[1]][::-1] + vazios
+        if not valores:
+            return qs
+        posicao = Case(*[When(pk=pk, then=n) for n, (pk, _) in enumerate(valores)], output_field=IntegerField())
+        return qs.order_by(posicao)
 
     # ---- consultas ---------------------------------------------------------
     def consulta(self, request):
@@ -74,7 +113,7 @@ class Recurso:
             f["atual"] = parametros.get(f["nome"], "")
             if f["atual"] and f["atual"] in dict(f["escolhas"]):
                 qs = qs.filter(**{f["nome"]: f["atual"]})
-        return qs, termo, filtros
+        return self.ordenar(qs, parametros.get("ordem", "")), termo, filtros
 
     def lista(self, request):
         qs, termo, filtros = self.filtrada(request, request.GET)
@@ -86,7 +125,8 @@ class Recurso:
                   for o in pagina]
         return render(request, "gestao/lista.html", {
             "recurso": self, "modulo": self.modulo, "pagina": pagina, "linhas": linhas, "termo": termo, "filtros": filtros,
-            "total": pagina.paginator.count, "parametros": parametros.urlencode()})
+            "total": pagina.paginator.count, "parametros": parametros.urlencode(),
+            "ordens": self.ORDENS if self.alfabetica else [], "ordem_atual": request.GET.get("ordem", "")})
 
     def editar(self, request, pk=None):
         objeto = get_object_or_404(self.modelo, pk=pk, loja=request.loja, **self.fixos) if pk else None

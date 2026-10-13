@@ -1,0 +1,25 @@
+{% extends "gestao/lista.html" %}{% load gestao_tags %}
+{% block painel %}
+<p class="suave" style="margin:-4px 0 12px">Valores de <b>{{ periodo }}</b>{% if filtros.4.atual or filtros.5.atual or termo %} com os filtros escolhidos{% endif %}.</p>
+<div class="grade">{% for rotulo, valor, nota in painel %}
+  <div class="card cartao-numero"><div class="rotulo">{{ rotulo }}</div><div class="valor">{{ valor|brl }}</div><div class="nota">{{ nota }}</div></div>{% endfor %}
+</div>
+{% endblock %}
+{% block tabela %}
+{% if resumo is not None %}
+<div class="card justo">
+  {% if resumo %}
+  <div class="rolagem"><table>
+    <thead><tr><th>Irmão / pagador</th><th class="num">Lançamentos</th><th class="num">Vencidos</th><th>Mais antigo</th><th class="num">Valor</th><th class="num">Já pago</th><th class="acoes"></th></tr></thead>
+    <tbody>{% for g in resumo %}<tr class="{% if g.vencidos %}atrasado{% endif %}">
+      <td><a href="{{ g.link }}">{{ g.nome }}</a></td><td class="num">{{ g.qtd }}</td><td class="num">{{ g.vencidos|default:"—" }}</td>
+      <td>{{ g.mais_antigo|date:"d/m/Y" }}</td><td class="num">{{ g.total|brl }}</td><td class="num">{{ g.pago|brl|default:"—" }}</td>
+      <td class="acoes"><a href="{{ g.link }}">Ver lançamentos</a></td></tr>{% endfor %}
+      <tr class="total"><td>Total ({{ resumo|length }})</td><td></td><td></td><td></td><td class="num">{{ total_resumo|brl }}</td><td></td><td></td></tr>
+    </tbody>
+  </table></div>
+  {% else %}<div class="vazio">Nenhum débito encontrado com esses filtros. Troque o ano, o mês ou a situação acima.</div>{% endif %}
+</div>
+<p class="ajuda">Clique no nome para ver os lançamentos daquele Irmão no período. Para quitar, gerar boleto ou excluir, use “Mostrar: Lançamentos um a um”.</p>
+{% else %}{{ block.super }}{% endif %}
+{% endblock tabela %}

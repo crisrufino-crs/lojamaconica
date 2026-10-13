@@ -1,6 +1,16 @@
 """Descrição de cada cadastro do sistema (quais colunas, filtros e ações cada tela tem)."""
+from decimal import Decimal
+
+from django.core.paginator import Paginator
+from django.db.models import Count, Min, Q, Sum, Value
+from django.db.models.functions import Coalesce, NullIf
+from django.shortcuts import render
+from django.urls import reverse
+from django.utils import timezone
+
 from . import servicos
 from .crud import Recurso
+from .relatorios import MESES
 from .forms import (EmprestimoForm, IrmaoForm, LicencaForm, PagarForm, PlanoContaForm, ReceberForm,
                     TransferenciaForm, UsuarioForm)
 from .models import (Ata, Bem, CampoExtra, CertificadoVisita, ContaBancaria, Dependente, Emprestimo, Evento, Grau,
@@ -84,17 +94,116 @@ def _classe_lancamento(l):
     return "atrasado" if l.vencido else ("apagado" if l.status == "cancelado" else "")
 
 
-Recurso("receber", Lancamento, "tesouraria", titulo="Contas a receber", form=ReceberForm, fixos={"tipo": "R"},
+QUEM = Coalesce(NullIf("irmao__nome", Value("")), "favorecido")  # "De / para": o Irmão ou o fornecedor
+
+
+class RecursoReceber(Recurso):
+    """Contas a receber vistas por ano e por filtro, com resumo dos débitos por Irmão (em vez de uma lista corrida)."""
+    SITUACOES = [("aberto", "Em aberto (todos)"), ("vencido", "Vencidos"), ("a_vencer", "A vencer"),
+                 ("pago", "Quitados"), ("cancelado", "Cancelados"), ("todos", "Todas as situações")]
+    VISOES = [("irmao", "Débitos por Irmão (resumo)"), ("lista", "Lançamentos um a um")]
+
+    def _escolhas(self, request, parametros):
+        hoje = timezone.localdate()
+        anos = sorted({d.year for d in self.consulta(request).dates("vencimento", "year")} | {hoje.year}, reverse=True)
+        sem_filtro = not any(k in parametros for k in ("ano", "situacao", "ver"))
+        atual = lambda nome, padrao: parametros.get(nome, padrao) if not sem_filtro else padrao  # noqa: E731
+        return [
+            {"nome": "ano", "rotulo": "Ano", "sem_todos": True, "atual": atual("ano", str(hoje.year)),
+             "escolhas": [(str(a), str(a)) for a in anos] + [("todos", "Todos os anos")]},
+            {"nome": "mes", "rotulo": "Mês", "atual": parametros.get("mes", ""),
+             "escolhas": [(str(i), m) for i, m in enumerate(MESES, 1)]},
+            {"nome": "situacao", "rotulo": "Situação", "sem_todos": True, "atual": atual("situacao", "aberto"),
+             "escolhas": self.SITUACOES},
+            {"nome": "ver", "rotulo": "Mostrar", "sem_todos": True, "atual": atual("ver", "irmao"), "escolhas": self.VISOES},
+        ]
+
+    def _periodo(self, qs, extras):
+        valores = {f["nome"]: f["atual"] for f in extras}
+        if valores["ano"].isdigit():
+            qs = qs.filter(vencimento__year=int(valores["ano"]))
+        if valores["mes"].isdigit():
+            qs = qs.filter(vencimento__month=int(valores["mes"]))
+        return qs, valores
+
+    def filtrada(self, request, parametros):
+        qs, termo, filtros = super().filtrada(request, parametros)
+        extras = self._escolhas(request, parametros)
+        qs, valores = self._periodo(qs, extras)
+        hoje, situacao = timezone.localdate(), valores["situacao"]
+        if situacao == "vencido":
+            qs = qs.filter(status="aberto", vencimento__lt=hoje)
+        elif situacao == "a_vencer":
+            qs = qs.filter(status="aberto", vencimento__gte=hoje)
+        elif situacao in ("aberto", "pago", "cancelado"):
+            qs = qs.filter(status=situacao)
+        return qs, termo, extras + filtros
+
+    def lista(self, request):
+        qs, termo, filtros = self.filtrada(request, request.GET)
+        valores = {f["nome"]: f["atual"] for f in filtros}
+        hoje = timezone.localdate()
+        # quadro de valores do período escolhido (independe da situação filtrada)
+        base, _ = self._periodo(Recurso.filtrada(self, request, request.GET)[0], filtros)
+        soma = lambda q, campo="valor": q.aggregate(s=Sum(campo))["s"] or Decimal("0")  # noqa: E731
+        abertos = base.filter(status="aberto")
+        painel = [("Em aberto", soma(abertos), f"{abertos.count()} lançamento(s)"),
+                  ("Vencido", soma(abertos.filter(vencimento__lt=hoje)),
+                   f"{abertos.filter(vencimento__lt=hoje).values('irmao').distinct().count()} Irmão(s) com atraso"),
+                  ("A vencer", soma(abertos.filter(vencimento__gte=hoje)), "ainda no prazo"),
+                  ("Recebido", soma(base.filter(status="pago"), "valor_pago"), f"{base.filter(status='pago').count()} quitado(s)")]
+        periodo = ("todos os anos" if valores["ano"] == "todos" else valores["ano"]) + (
+            f", {MESES[int(valores['mes']) - 1].lower()}" if valores["mes"].isdigit() else "")
+        contexto = {"recurso": self, "modulo": self.modulo, "termo": termo, "filtros": filtros, "painel": painel,
+                    "periodo": periodo, "ordens": self.ORDENS + [("maior", "Maior débito primeiro")],
+                    "ordem_atual": request.GET.get("ordem", ""), "resumo": None}
+        parametros = request.GET.copy()
+        parametros.pop("pagina", None)
+        contexto["parametros"] = parametros.urlencode()
+        if valores["ver"] == "irmao":
+            grupos = (qs.order_by().values("irmao_id", "irmao__nome", "favorecido")
+                      .annotate(qtd=Count("id"), total=Sum("valor"), pago=Sum("valor_pago"), mais_antigo=Min("vencimento"),
+                                vencidos=Count("id", filter=Q(status="aberto", vencimento__lt=hoje))))
+            resumo = [{**g, "nome": g["irmao__nome"] or g["favorecido"] or "—"} for g in grupos]
+            ordem = request.GET.get("ordem", "")
+            if ordem == "maior":
+                resumo.sort(key=lambda g: -(g["total"] or 0))
+            else:
+                import unicodedata
+                chave_nome = lambda g: unicodedata.normalize("NFKD", g["nome"]).encode("ascii", "ignore").decode().lower()  # noqa: E731
+                resumo.sort(key=chave_nome, reverse=(ordem == "za"))
+            base_link = request.GET.copy()
+            base_link["ver"], base_link["situacao"], base_link["ano"] = "lista", valores["situacao"], valores["ano"]
+            for g in resumo:
+                link = base_link.copy()
+                if g["irmao_id"]:
+                    link["irmao"] = g["irmao_id"]
+                else:
+                    link["q"] = g["favorecido"]
+                g["link"] = "?" + link.urlencode()
+            contexto.update(resumo=resumo, total=len(resumo), linhas=[],
+                            total_resumo=sum((g["total"] or 0 for g in resumo), Decimal("0")))
+        else:
+            if request.GET.get("ordem") == "maior":
+                qs = qs.order_by("-valor", "vencimento")
+            pagina = Paginator(qs, 50).get_page(request.GET.get("pagina"))
+            contexto.update(pagina=pagina, total=pagina.paginator.count, linhas=[
+                {"obj": o, "classe": self.classe_linha(o) if self.classe_linha else "",
+                 "acoes": [(a[0], reverse(a[1], args=[o.pk])) for a in self.acoes if len(a) < 3 or a[2](o)]} for o in pagina])
+        return render(request, "gestao/receber.html", contexto)
+
+
+RecursoReceber("receber", Lancamento, "tesouraria", titulo="Contas a receber", form=ReceberForm, fixos={"tipo": "R"},
         relacionados=("irmao", "plano"), colunas=COLUNAS_LANCAMENTO, busca=("descricao", "irmao__nome", "favorecido"),
-        filtros=("status", "irmao", "plano"), acoes=ACOES_LANCAMENTO, classe_linha=_classe_lancamento,
+        filtros=("irmao", "plano"), acoes=ACOES_LANCAMENTO, classe_linha=_classe_lancamento, alfabetica=QUEM,
         acoes_topo=[("Mensalidades em série", "mensalidades_serie")], aviso_exclusao=_aviso_lancamentos)
 
-Recurso("pagar", Lancamento, "tesouraria", titulo="Contas a pagar", form=PagarForm, fixos={"tipo": "P"},
+Recurso("pagar", Lancamento, "tesouraria", titulo="Contas a pagar", form=PagarForm, fixos={"tipo": "P"}, alfabetica=QUEM,
         relacionados=("irmao", "plano"), colunas=COLUNAS_LANCAMENTO, busca=("descricao", "irmao__nome", "favorecido"),
         filtros=("status", "plano"), acoes=[a for a in ACOES_LANCAMENTO if a[0] != "Boleto"],
         classe_linha=_classe_lancamento, aviso_exclusao=_aviso_lancamentos)
 
-Recurso("plano-contas", PlanoConta, "tesouraria", form=PlanoContaForm, relacionados=("pai",),
+Recurso("plano-contas", PlanoConta, "tesouraria", form=PlanoContaForm, alfabetica="nome", relacionados=("pai",),
         colunas=[("Código", "codigo"), ("Conta", lambda p: " " * p.nivel + p.nome), ("Tipo", "tipo"),
                  ("Aceita lançamentos", "aceita_lancamento")],
         busca=("codigo", "nome"), filtros=("tipo",),

@@ -708,7 +708,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-J")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-K")
 
 
 def importacao_colunas():
@@ -852,7 +852,7 @@ class ExcluirVariosNosModulos(Base):
             tem = recurso.selecao is not None
             self.assertEqual(tem, recurso.modulo != "admin", slug)
         self.receber()
-        self.assertContains(self.client.get(reverse("receber_lista")), 'id="excluir-selecionados"')
+        self.assertContains(self.client.get(reverse("receber_lista"), {"ver": "lista"}), 'id="excluir-selecionados"')
         self.assertNotContains(self.client.get(reverse("usuarios_lista")), 'id="excluir-selecionados"')
         with self.assertRaises(Exception):
             reverse("usuarios_excluir_varios")
@@ -1087,3 +1087,62 @@ class ImportarFinanceiro(Base):
         self.assertContains(r, ".xlsx")
         self.entrar(self.secretario)
         self.assertEqual(self.client.get(url).status_code, 403)
+
+
+class OrdemAlfabetica(Base):
+    def test_todas_as_listas_tem_a_opcao_e_ordenam(self):
+        self.entrar(self.master)
+        for slug, recurso in RECURSOS.items():
+            pagina = self.client.get(reverse(f"{slug}_lista"), {"ordem": "az", "ver": "lista"})
+            self.assertEqual(pagina.status_code, 200, slug)
+            self.assertContains(pagina, "Organizar por", msg_prefix=slug)
+        Irmao.objects.filter(pk=self.irmaos[2].pk).update(nome="Álvaro Zero")
+        Irmao.objects.filter(pk=self.irmaos[3].pk).update(nome="Zacarias")
+        nomes = lambda ordem: [l["obj"].nome for l in self.client.get(reverse("irmaos_lista"), {"ordem": ordem}).context["linhas"]]  # noqa: E731
+        az = nomes("az")
+        self.assertEqual(az[-1], "Zacarias")
+        self.assertEqual(nomes("za"), list(reversed(az)))
+
+    def test_receber_alfabetica_pelo_nome_de_quem_paga(self):
+        self.receber(self.irmaos[3])
+        Lancamento.objects.create(loja=self.loja, tipo="R", descricao="Aluguel do salão", favorecido="Aaron Locações",
+                                  plano=self.plano["1.9"], valor=D("10"), vencimento=self.hoje)
+        self.entrar(self.tesoureiro)
+        linhas = self.client.get(reverse("receber_lista"), {"ver": "lista", "ordem": "az"}).context["linhas"]
+        self.assertEqual([l["obj"].quem for l in linhas], ["Aaron Locações", "Irmão 3"])
+
+
+class ReceberPorAnoEFiltro(Base):
+    def test_resumo_por_irmao_no_ano_e_filtros(self):
+        hoje = self.hoje
+        ano_passado = hoje.replace(year=hoje.year - 1, day=1)
+        vencido = self.receber(self.irmaos[0], valor="100", vencimento=hoje.replace(day=1) if hoje.day > 1 else hoje)
+        Lancamento.objects.filter(pk=vencido.pk).update(vencimento=date(hoje.year, 1, 10))
+        self.receber(self.irmaos[0], valor="50", vencimento=date(hoje.year, 12, 31))
+        self.receber(self.irmaos[1], valor="70", vencimento=ano_passado)
+        pago = self.receber(self.irmaos[2], valor="30", vencimento=date(hoje.year, 2, 5))
+        servicos.quitar(pago, date(hoje.year, 2, 5), D("30"), self.caixa)
+        self.entrar(self.tesoureiro)
+        url = reverse("receber_lista")
+        r = self.client.get(url)  # padrão: ano atual, em aberto, resumo por Irmão
+        resumo = {g["nome"]: g for g in r.context["resumo"]}
+        self.assertEqual(set(resumo), {"Irmão 0"})
+        self.assertEqual((resumo["Irmão 0"]["qtd"], resumo["Irmão 0"]["total"], resumo["Irmão 0"]["vencidos"]), (2, D("150"), 1))
+        painel = {rotulo: valor for rotulo, valor, nota in r.context["painel"]}
+        self.assertEqual((painel["Em aberto"], painel["Vencido"], painel["A vencer"], painel["Recebido"]),
+                         (D("150"), D("100"), D("50"), D("30")))
+        self.assertNotContains(r, 'name="ids"')  # não é mais uma lista corrida
+        r = self.client.get(url, {"ano": str(hoje.year - 1), "situacao": "aberto", "ver": "irmao"})
+        self.assertEqual([g["nome"] for g in r.context["resumo"]], ["Irmão 1"])
+        r = self.client.get(url, {"ano": "todos", "situacao": "vencido", "ver": "lista"})
+        self.assertEqual(sorted(l["obj"].valor for l in r.context["linhas"]), [D("70"), D("100")])
+        r = self.client.get(url, {"ano": str(hoje.year), "situacao": "pago", "ver": "irmao"})
+        self.assertEqual([g["nome"] for g in r.context["resumo"]], ["Irmão 2"])
+        r = self.client.get(url, {"ano": str(hoje.year), "mes": "12", "situacao": "todos", "ver": "lista"})
+        self.assertEqual([l["obj"].valor for l in r.context["linhas"]], [D("50")])
+        link = self.client.get(url).context["resumo"][0]["link"]
+        r = self.client.get(url + link)
+        self.assertEqual({l["obj"].irmao for l in r.context["linhas"]}, {self.irmaos[0]})
+        # "selecionar todos" para excluir respeita o ano e a situação da tela
+        pagina = self.client.post(reverse("receber_excluir_varios"), {"todos": "1", "ano": str(hoje.year - 1), "situacao": "aberto"})
+        self.assertContains(pagina, "Excluir 1 registro(s)")

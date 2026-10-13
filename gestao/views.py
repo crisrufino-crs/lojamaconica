@@ -377,21 +377,31 @@ def lancamento_cancelar(request, pk):
 def mensalidades_serie(request):
     loja, hoje = request.loja, timezone.localdate()
     ativos = Irmao.objects.filter(loja=loja, situacao="ativo")
+    ja_remidos = Irmao.objects.filter(loja=loja, situacao="remido")
     form = MensalidadesForm(request.POST or None, loja=loja, initial={
         "valor": loja.valor_mensalidade or None, "irmaos": list(ativos.values_list("pk", flat=True)),
+        "remidos": list(ja_remidos.values_list("pk", flat=True)),
         "primeiro_vencimento": servicos.somar_meses(hoje, 1, loja.dia_vencimento)})
     if request.method == "POST" and form.is_valid():
         d = form.cleaned_data
-        criados, pulados = servicos.gerar_mensalidades(loja, list(d["irmaos"]), d["plano"], d["valor"],
+        marcados = {i.pk for i in d["remidos"]}
+        novos_remidos = Irmao.objects.filter(loja=loja, pk__in=marcados).exclude(situacao="remido").update(situacao="remido")
+        deixaram = ja_remidos.exclude(pk__in=marcados).update(situacao="ativo")
+        pagantes = list(Irmao.objects.filter(loja=loja, pk__in=[i.pk for i in d["irmaos"]]))  # já com a situação atualizada
+        criados, pulados = servicos.gerar_mensalidades(loja, pagantes, d["plano"], d["valor"],
                                                        d["primeiro_vencimento"], d["meses"], d["descricao"])
         aviso = f" {pulados} já existiam e foram mantidos como estavam." if pulados else ""
-        messages.success(request, f"{criados} mensalidade(s) lançada(s) para {len(d['irmaos'])} Irmão(s).{aviso}")
+        isentos = f" {len(marcados)} remido(s) ficaram isentos." if marcados else ""
+        mudancas = (f" {novos_remidos} Irmão(s) passaram a Remido" if novos_remidos else "") + (
+            f"{';' if novos_remidos else ''} {deixaram} deixaram de ser Remido" if deixaram else "")
+        messages.success(request, f"{criados} mensalidade(s) lançada(s) para {len(d['irmaos'])} Irmão(s).{isentos}{aviso}"
+                                  + (f"{mudancas} no cadastro." if mudancas else ""))
         return redirect("receber_lista")
     return render(request, "gestao/form.html", {
         "form": form, "modulo": "tesouraria", "titulo": "Mensalidades em série", "voltar": reverse("receber_lista"),
-        "ajuda": "Lança de uma vez as mensalidades de vários Irmãos para vários meses. "
-                 "Se um Irmão já tiver mensalidade lançada para algum mês, ela não é duplicada.",
-        "botao": "Lançar mensalidades"})
+        "ajuda": "Lança de uma vez as mensalidades de vários Irmãos para vários meses. Os Irmãos marcados como "
+                 "Remidos ficam isentos. Se um Irmão já tiver mensalidade lançada para algum mês, ela não é duplicada.",
+        "botao": "Lançar mensalidades", "script_remidos": True})
 
 
 def _contas_boleto(loja):

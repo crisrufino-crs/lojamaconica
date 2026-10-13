@@ -203,6 +203,8 @@ def gerar_mensalidades(loja, irmaos, plano, valor, primeiro_vencimento, meses, d
         vencimento = somar_meses(primeiro_vencimento, n)
         competencia = vencimento.replace(day=1)
         for irmao in irmaos:
+            if irmao.situacao == "remido":  # remido é isento de mensalidade
+                continue
             if (irmao.pk, competencia) in ja_existem:
                 pulados += 1
                 continue

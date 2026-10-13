@@ -708,7 +708,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-K")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 13/10/2026-L")
 
 
 def importacao_colunas():
@@ -1146,3 +1146,31 @@ class ReceberPorAnoEFiltro(Base):
         # "selecionar todos" para excluir respeita o ano e a situação da tela
         pagina = self.client.post(reverse("receber_excluir_varios"), {"todos": "1", "ano": str(hoje.year - 1), "situacao": "aberto"})
         self.assertContains(pagina, "Excluir 1 registro(s)")
+
+
+class MensalidadesComRemidos(Base):
+    def test_remido_fica_isento_e_situacao_e_atualizada(self):
+        Irmao.objects.filter(pk=self.irmaos[3].pk).update(situacao="remido")
+        self.entrar(self.tesoureiro)
+        url = reverse("mensalidades_serie")
+        pagina = self.client.get(url)
+        self.assertContains(pagina, "Remidos (isentos de mensalidade)")
+        self.assertEqual(pagina.context["form"].initial["remidos"], [self.irmaos[3].pk])
+        dados = {"plano": self.plano["1.1"].pk, "descricao": "Mensalidade", "valor": "100", "meses": 3,
+                 "primeiro_vencimento": "2026-11-10", "irmaos": [i.pk for i in self.irmaos],  # marcou todos, até os remidos
+                 "remidos": [self.irmaos[0].pk]}  # Irmão 0 vira remido; Irmão 3 foi desmarcado
+        self.client.post(url, dados)
+        cobrados = set(Lancamento.objects.values_list("irmao__nome", flat=True))
+        self.assertEqual(cobrados, {"Irmão 1", "Irmão 2", "Irmão 3"})
+        self.assertEqual(Lancamento.objects.count(), 9)
+        self.assertEqual(Irmao.objects.get(pk=self.irmaos[0].pk).situacao, "remido")
+        self.assertEqual(Irmao.objects.get(pk=self.irmaos[3].pk).situacao, "ativo")
+        r = self.client.post(url, {**dados, "irmaos": [self.irmaos[0].pk]})  # só um remido marcado para pagar
+        self.assertContains(r, "Marque pelo menos um Irmão que paga mensalidade")
+
+    def test_servico_nunca_cobra_remido(self):
+        Irmao.objects.filter(pk=self.irmaos[0].pk).update(situacao="remido")
+        criados, _ = servicos.gerar_mensalidades(self.loja, list(Irmao.objects.filter(loja=self.loja)), self.plano["1.1"],
+                                                 D("100"), date(2026, 11, 10), 2)
+        self.assertEqual(criados, 6)
+        self.assertFalse(Lancamento.objects.filter(irmao=self.irmaos[0]).exists())

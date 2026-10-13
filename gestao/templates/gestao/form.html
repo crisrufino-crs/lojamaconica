@@ -13,4 +13,21 @@
     <a class="botao claro" href="{{ request.GET.voltar|default:voltar }}">Voltar sem salvar</a>
   </div>
 </form>
+{% if script_remidos %}<script>
+/* Mensalidades em série: quem é marcado como Remido sai da lista de quem paga. */
+(function () {
+  function sincronizar() {
+    document.querySelectorAll('input[name=remidos]').forEach(function (r) {
+      var paga = document.querySelector('input[name=irmaos][value="' + r.value + '"]');
+      if (!paga) return;
+      if (r.checked) paga.checked = false;
+      paga.disabled = r.checked;
+      paga.closest('label').style.opacity = r.checked ? .45 : 1;
+      paga.closest('label').title = r.checked ? 'Remido: isento de mensalidade' : '';
+    });
+  }
+  document.querySelectorAll('input[name=remidos]').forEach(function (r) { r.addEventListener('change', sincronizar); });
+  sincronizar();
+})();
+</script>{% endif %}
 {% endblock %}

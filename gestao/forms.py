@@ -147,8 +147,27 @@ class MensalidadesForm(FormSimples):
     primeiro_vencimento = forms.DateField(label="Primeiro vencimento")
     meses = forms.IntegerField(label="Quantidade de meses", min_value=1, max_value=24, initial=12)
     irmaos = forms.ModelMultipleChoiceField(
-        label="Irmãos", queryset=Irmao.objects.filter(situacao__in=["ativo", "licenciado", "irregular"]),
-        widget=forms.CheckboxSelectMultiple)
+        label="Irmãos que pagam mensalidade", queryset=Irmao.objects.filter(situacao__in=["ativo", "licenciado", "irregular", "remido"]),
+        widget=forms.CheckboxSelectMultiple, required=False)
+    remidos = forms.ModelMultipleChoiceField(
+        label="Remidos (isentos de mensalidade)", required=False,
+        queryset=Irmao.objects.filter(situacao__in=["ativo", "licenciado", "irregular", "remido"]),
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Marque os Irmãos remidos: eles não recebem mensalidade e ficam com a situação “Remido” no cadastro. "
+                  "Desmarcar um remido o devolve à situação “Ativo”.")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for nome in ("irmaos", "remidos"):
+            self.fields[nome].queryset = self.fields[nome].queryset.order_by("nome")
+
+    def clean(self):
+        dados = super().clean()
+        remidos = set(dados.get("remidos") or [])
+        dados["irmaos"] = [i for i in (dados.get("irmaos") or []) if i not in remidos]  # remido nunca é cobrado
+        if not dados["irmaos"] and "irmaos" not in self.errors:
+            self.add_error("irmaos", "Marque pelo menos um Irmão que paga mensalidade.")
+        return dados
 
 
 class LicencaForm(FormDaLoja):

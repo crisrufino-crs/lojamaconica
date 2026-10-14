@@ -21,7 +21,9 @@ DEBUG = env("DJANGO_DEBUG", "1" if MODO_TESTE else "0") == "1"
 ALLOWED_HOSTS = [h.strip() for h in env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in env("DJANGO_CSRF_ORIGINS").split(",") if o.strip()]
 # Hospedagens como Render e Railway informam sozinhas o endereço do site.
-for _host in (env("RENDER_EXTERNAL_HOSTNAME"), env("RAILWAY_PUBLIC_DOMAIN")):
+# Endereço próprio do sistema (domínio ordofraternus.com.br) e outros extras.
+DOMINIOS_PROPRIOS = [d.strip() for d in env("DOMINIOS_PROPRIOS", "gestao.ordofraternus.com.br").split(",") if d.strip()]
+for _host in (env("RENDER_EXTERNAL_HOSTNAME"), env("RAILWAY_PUBLIC_DOMAIN"), *DOMINIOS_PROPRIOS):
     if _host:
         ALLOWED_HOSTS.append(_host)
         CSRF_TRUSTED_ORIGINS.append(f"https://{_host}")

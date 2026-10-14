@@ -13,6 +13,8 @@ services:
     buildCommand: bash build.sh
     startCommand: gunicorn config.wsgi --workers 2 --timeout 60
     healthCheckPath: /entrar/
+    domains:
+      - gestao.ordofraternus.com.br
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7

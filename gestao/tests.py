@@ -1,4 +1,5 @@
 """Testes automáticos. Rode com:  python manage.py test"""
+from io import StringIO
 import json
 import tempfile
 from datetime import date, timedelta
@@ -708,7 +709,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 14/10/2026-A")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 16/10/2026-A")
 
 
 def importacao_colunas():
@@ -1284,3 +1285,17 @@ class LancamentoRemido(Base):
         r = self.client.post(url, {**base, "plano": self.plano["1.1"].pk, "valor": "0"})
         self.assertContains(r, "O valor precisa ser maior que zero")
         self.assertEqual(servicos.saldo_conta(self.caixa), D("0"))
+
+
+class LojaInicialDoServidor(TestCase):
+    def test_cria_a_loja_real_sem_dados_ficticios_e_recebe_a_carga(self):
+        from django.core.management import call_command
+        call_command("loja_inicial", stdout=StringIO())
+        loja = Loja.objects.get()
+        self.assertEqual((loja.nome, loja.numero), ("L'AQUILA ROMANA", "3365"))
+        self.assertFalse(Irmao.objects.exists())
+        self.assertTrue(PlanoConta.objects.filter(loja=loja, codigo="1.6").exists())
+        call_command("loja_inicial", stdout=StringIO())  # segunda vez não duplica
+        self.assertEqual(Loja.objects.count(), 1)
+        call_command("carga_inicial", stdout=StringIO(), stderr=StringIO())
+        self.assertEqual(Irmao.objects.filter(loja=loja).count(), 47)

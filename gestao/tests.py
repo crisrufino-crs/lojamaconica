@@ -709,7 +709,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 16/10/2026-A")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 17/10/2026-A")
 
 
 def importacao_colunas():

@@ -24,3 +24,6 @@ services:
         fromDatabase:
           name: lojas-banco
           property: connectionString
+      # Banco permanente (Neon). Preencha no painel do Render: Environment > BANCO_URL.
+      - key: BANCO_URL
+        sync: false

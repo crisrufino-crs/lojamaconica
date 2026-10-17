@@ -5,7 +5,7 @@ variáveis de ambiente (veja o arquivo .env.exemplo).
 """
 import os
 from pathlib import Path
-from urllib.parse import urlparse, unquote
+from urllib.parse import parse_qs, unquote, urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -75,11 +75,14 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 
-def _banco():
-    url = env("DATABASE_URL")
+def _banco(url):
     if not url:
         return {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "dados" / "banco.sqlite3"}
+    if url.startswith("sqlite:///"):
+        return {"ENGINE": "django.db.backends.sqlite3", "NAME": url[len("sqlite:///"):]}
     p = urlparse(url)
+    # Parâmetros do endereço (ex.: ?sslmode=require do Neon) viram opções da conexão.
+    opcoes = {k: v[-1] for k, v in parse_qs(p.query).items()}
     return {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": p.path.lstrip("/"),
@@ -88,10 +91,17 @@ def _banco():
         "HOST": p.hostname or "",
         "PORT": str(p.port or ""),
         "CONN_MAX_AGE": 60,
+        "OPTIONS": opcoes,
     }
 
 
-DATABASES = {"default": _banco()}
+# BANCO_URL (ex.: banco gratuito e permanente no Neon) tem prioridade sobre o DATABASE_URL do Render.
+# Enquanto os dois existirem, o banco antigo fica disponível como "antigo" para a cópia automática.
+_URL_NOVO = env("BANCO_URL")
+_URL_ANTIGO = env("DATABASE_URL")
+DATABASES = {"default": _banco(_URL_NOVO or _URL_ANTIGO)}
+if _URL_NOVO and _URL_ANTIGO and _URL_NOVO != _URL_ANTIGO:
+    DATABASES["antigo"] = _banco(_URL_ANTIGO)
 (BASE_DIR / "dados").mkdir(exist_ok=True)
 
 AUTH_USER_MODEL = "gestao.Usuario"

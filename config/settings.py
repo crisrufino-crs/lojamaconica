@@ -135,13 +135,27 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # tela protegida "arquivo", que confere a Loja e o acesso de quem pede.
 MEDIA_ROOT = Path(env("MEDIA_ROOT", str(BASE_DIR / "dados" / "arquivos")))
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+# O conteúdo dos arquivos fica guardado no banco de dados (não se perde quando a hospedagem reinicia).
+# MEDIA_ROOT continua só para ler arquivos antigos que ainda estejam no disco.
+STORAGES = {
+    "default": {"BACKEND": "gestao.armazenamento.BancoStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- E-mail -----------------------------------------------------------------
 # Sem servidor de e-mail configurado, as mensagens aparecem na tela do
 # terminal em vez de serem enviadas (bom para testar sem incomodar ninguém).
-if env("EMAIL_HOST"):
+# E-mail. No Render gratuito as portas de SMTP são bloqueadas; por isso o sistema envia pela internet
+# (HTTPS) usando a API do Resend ou do Brevo. SMTP continua possível em servidor próprio (VPS).
+RESEND_API_KEY = env("RESEND_API_KEY").strip()
+BREVO_API_KEY = env("BREVO_API_KEY").strip()
+if RESEND_API_KEY:
+    EMAIL_BACKEND = "gestao.email_http.ResendBackend"
+elif BREVO_API_KEY:
+    EMAIL_BACKEND = "gestao.email_http.BrevoBackend"
+elif env("EMAIL_HOST"):
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST = env("EMAIL_HOST")
     EMAIL_PORT = int(env("EMAIL_PORT", "587"))
@@ -151,7 +165,7 @@ if env("EMAIL_HOST"):
 else:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = env("EMAIL_REMETENTE", "nao-responda@localhost")
-EMAIL_ENVIADO_DE_VERDADE = bool(env("EMAIL_HOST"))
+EMAIL_ENVIADO_DE_VERDADE = bool(RESEND_API_KEY or BREVO_API_KEY or env("EMAIL_HOST"))
 
 # --- Notificações no celular (Web Push) ---------------------------------------
 # Gere as chaves com:  python manage.py gerar_chaves_push

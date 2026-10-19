@@ -7,6 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlparse
 
+from django.core.files.storage import default_storage
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -782,11 +783,15 @@ def arquivo(request, caminho):
         raise Http404
     if len(partes) > 1 and partes[1] in ("atas", "retornos") and not request.user.pode("secretaria"):
         raise PermissionDenied
-    completo = (settings.MEDIA_ROOT / caminho).resolve()
-    if not completo.is_file() or settings.MEDIA_ROOT.resolve() not in completo.parents:
+    try:
+        conteudo = default_storage.open(caminho)
+    except (FileNotFoundError, OSError):
         raise Http404
-    tipo = mimetypes.guess_type(completo.name)[0] or "application/octet-stream"
+    nome = Path(caminho).name
+    tipo = mimetypes.guess_type(nome)[0] or "application/octet-stream"
     mostrar_na_tela = tipo.startswith("image/") and tipo != "image/svg+xml" or tipo == "application/pdf"
-    resposta = FileResponse(open(completo, "rb"), content_type=tipo, as_attachment=not mostrar_na_tela)
+    resposta = FileResponse(conteudo, content_type=tipo, as_attachment=not mostrar_na_tela, filename=nome)
     resposta["X-Content-Type-Options"] = "nosniff"
+    # Cada arquivo tem nome único e nunca muda: o navegador pode guardar por 30 dias (abre mais rápido).
+    resposta["Cache-Control"] = "private, max-age=2592000, immutable"
     return resposta

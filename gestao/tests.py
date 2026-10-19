@@ -709,7 +709,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 19/10/2026-A")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 19/10/2026-C")
 
 
 def importacao_colunas():
@@ -1299,3 +1299,107 @@ class LojaInicialDoServidor(TestCase):
         self.assertEqual(Loja.objects.count(), 1)
         call_command("carga_inicial", stdout=StringIO(), stderr=StringIO())
         self.assertEqual(Irmao.objects.filter(loja=loja).count(), 47)
+
+
+class ArquivosNoBanco(Base):
+    """Fotos, brasão e atas ficam no banco de dados (não se perdem quando a hospedagem reinicia)."""
+
+    def _foto(self, lado=2400, nome="foto.jpg"):
+        from io import BytesIO
+        from PIL import Image
+        saida = BytesIO()
+        Image.new("RGB", (lado, lado // 2), (120, 30, 30)).save(saida, "JPEG", quality=95)
+        return SimpleUploadedFile(nome, saida.getvalue(), content_type="image/jpeg")
+
+    def test_foto_fica_no_banco_reduzida_e_abre_so_na_propria_loja(self):
+        from io import BytesIO
+        from PIL import Image
+        from .models import ArquivoGuardado
+        irmao = self.irmaos[2]
+        irmao.foto = self._foto()
+        irmao.save()
+        guardado = ArquivoGuardado.objects.get(nome=irmao.foto.name)
+        self.assertLessEqual(max(Image.open(BytesIO(bytes(guardado.conteudo))).size), 1600)
+        self.entrar(self.master)
+        resposta = self.client.get(reverse("arquivo", args=[irmao.foto.name]))
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta["Content-Type"], "image/jpeg")
+        self.assertIn("max-age", resposta["Cache-Control"])
+        self.entrar(self.master_b)
+        self.assertEqual(self.client.get(reverse("arquivo", args=[irmao.foto.name])).status_code, 404)
+
+    def test_trocar_e_excluir_limpa_o_arquivo_antigo(self):
+        from .models import ArquivoGuardado
+        irmao = Irmao.objects.create(loja=self.loja, nome="Com foto")
+        irmao.foto = self._foto(lado=300)
+        irmao.save()
+        primeira = irmao.foto.name
+        irmao.foto = self._foto(lado=320, nome="nova.jpg")
+        irmao.save()
+        self.assertFalse(ArquivoGuardado.objects.filter(nome=primeira).exists())
+        self.assertTrue(ArquivoGuardado.objects.filter(nome=irmao.foto.name).exists())
+        segunda = irmao.foto.name
+        irmao.delete()
+        self.assertFalse(ArquivoGuardado.objects.filter(nome=segunda).exists())
+
+    def test_arquivo_antigo_do_disco_vai_para_o_banco(self):
+        from pathlib import Path
+        from django.core.management import call_command
+        from .models import ArquivoGuardado
+        with tempfile.TemporaryDirectory() as pasta, override_settings(MEDIA_ROOT=pasta):
+            alvo = Path(pasta) / f"loja_{self.loja.pk}" / "atas" / "velha.pdf"
+            alvo.parent.mkdir(parents=True)
+            alvo.write_bytes(b"%PDF-1.4 teste")
+            self.entrar(self.secretario)
+            nome = f"loja_{self.loja.pk}/atas/velha.pdf"
+            self.assertEqual(self.client.get(reverse("arquivo", args=[nome])).status_code, 200)
+            call_command("arquivos_para_banco", stdout=StringIO())
+            self.assertEqual(bytes(ArquivoGuardado.objects.get(nome=nome).conteudo), b"%PDF-1.4 teste")
+
+
+class Monitor(TestCase):
+    def test_saude_responde_sem_login_e_sem_banco(self):
+        with self.assertNumQueries(0):
+            resposta = self.client.get("/saude/")
+        self.assertEqual(resposta.content, b"ok")
+
+
+class EmailPelaInternet(TestCase):
+    """No Render gratuito o SMTP é bloqueado: o e-mail sai pela API (HTTPS) do Resend ou do Brevo."""
+
+    def _enviar(self, backend):
+        from django.core.mail import EmailMultiAlternatives
+        enviados = []
+
+        class Resposta:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+
+        def falso_urlopen(pedido, timeout=0):
+            enviados.append((pedido.full_url, dict(pedido.header_items()), json.loads(pedido.data)))
+            return Resposta()
+
+        with mock.patch("gestao.email_http.urllib.request.urlopen", falso_urlopen):
+            m = EmailMultiAlternatives("Assunto", "Texto", "Loja <nao-responda@ordofraternus.com.br>",
+                                       ["irmao@exemplo.com.br"], connection=backend)
+            m.attach_alternative("<p>Texto</p>", "text/html")
+            self.assertEqual(backend.send_messages([m]), 1)
+        return enviados[0]
+
+    @override_settings(RESEND_API_KEY="re_teste")
+    def test_resend(self):
+        from .email_http import ResendBackend
+        url, cab, corpo = self._enviar(ResendBackend())
+        self.assertEqual(url, "https://api.resend.com/emails")
+        self.assertEqual(cab["Authorization"], "Bearer re_teste")
+        self.assertEqual(corpo["to"], ["irmao@exemplo.com.br"])
+        self.assertEqual(corpo["html"], "<p>Texto</p>")
+
+    @override_settings(BREVO_API_KEY="xkeysib-teste")
+    def test_brevo(self):
+        from .email_http import BrevoBackend
+        url, cab, corpo = self._enviar(BrevoBackend())
+        self.assertEqual(url, "https://api.brevo.com/v3/smtp/email")
+        self.assertEqual(cab["Api-key"], "xkeysib-teste")
+        self.assertEqual(corpo["sender"], {"email": "nao-responda@ordofraternus.com.br", "name": "Loja"})

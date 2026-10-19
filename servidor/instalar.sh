@@ -164,6 +164,7 @@ gestao-comando migrate --noinput
 gestao-comando collectstatic --noinput >/dev/null
 gestao-comando loja_inicial
 gestao-comando garantir_admin
+gestao-comando arquivos_para_banco || true
 gestao-comando carga_inicial || true
 ok "sistema montado"
 

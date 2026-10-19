@@ -12,7 +12,7 @@ services:
     plan: free
     buildCommand: bash build.sh
     startCommand: gunicorn config.wsgi --workers 2 --timeout 60
-    healthCheckPath: /entrar/
+    healthCheckPath: /saude/
     domains:
       - gestao.ordofraternus.com.br
     envVars:
@@ -27,3 +27,8 @@ services:
       # Banco permanente (Neon). Preencha no painel do Render: Environment > BANCO_URL.
       - key: BANCO_URL
         sync: false
+      # E-mail pela internet (o Render gratuito bloqueia SMTP). Chave do resend.com: Environment > RESEND_API_KEY.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_REMETENTE
+        value: "Gestão da Loja <nao-responda@ordofraternus.com.br>"

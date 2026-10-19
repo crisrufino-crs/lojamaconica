@@ -657,3 +657,47 @@ class CargaImportada(DaLoja):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["loja", "assinatura"], name="carga_unica_por_loja")]
+
+
+class ArquivoGuardado(models.Model):
+    """Conteúdo dos arquivos enviados (fotos, brasão, atas), guardado no próprio banco de dados.
+
+    Assim nada se perde quando a hospedagem reinicia ou troca de servidor.
+    """
+    nome = models.CharField(max_length=255, unique=True)
+    conteudo = models.BinaryField()
+    tipo = models.CharField(max_length=100, blank=True)
+    tamanho = models.PositiveIntegerField(default=0)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.nome
+
+
+# --- Limpeza: ao trocar ou excluir uma foto/brasão/ata, o arquivo antigo sai do banco -------------
+from django.db.models.signals import post_delete, pre_save  # noqa: E402
+from django.dispatch import receiver  # noqa: E402
+
+_CAMPOS_ARQUIVO = {"Loja": ["brasao"], "Irmao": ["foto"], "Ata": ["arquivo"]}
+
+
+def _apagar(nome):
+    if nome:
+        ArquivoGuardado.objects.filter(nome=nome).delete()
+
+
+@receiver(pre_save)
+def _trocar_arquivo(sender, instance, **kwargs):
+    campos = _CAMPOS_ARQUIVO.get(sender.__name__)
+    if not campos or not instance.pk or kwargs.get("raw"):
+        return
+    antigo = sender.objects.filter(pk=instance.pk).values(*campos).first()
+    for campo in campos:
+        if antigo and antigo[campo] and antigo[campo] != getattr(instance, campo).name:
+            _apagar(antigo[campo])
+
+
+@receiver(post_delete)
+def _excluir_arquivo(sender, instance, **kwargs):
+    for campo in _CAMPOS_ARQUIVO.get(sender.__name__, []):
+        _apagar(getattr(instance, campo).name)

@@ -6,6 +6,7 @@ python manage.py collectstatic --noinput
 python manage.py migrate --noinput
 # Se houver um banco novo (BANCO_URL), copia os dados do banco antigo uma única vez. Se falhar, a publicação para.
 python manage.py mudar_banco
+python manage.py arquivos_para_banco || true
 python manage.py demo || true
 # Aconteça o que acontecer acima, o Administrador sempre existe e consegue entrar.
 python manage.py garantir_admin

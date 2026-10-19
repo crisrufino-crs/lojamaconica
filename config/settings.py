@@ -4,6 +4,7 @@ Tudo que muda entre o computador de teste e o servidor de verdade vem de
 variáveis de ambiente (veja o arquivo .env.exemplo).
 """
 import os
+import re
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -80,12 +81,21 @@ def _banco(url):
         return {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "dados" / "banco.sqlite3"}
     if url.startswith("sqlite:///"):
         return {"ENGINE": "django.db.backends.sqlite3", "NAME": url[len("sqlite:///"):]}
+    # Tolera endereços colados com sobras: "psql '...'", aspas, espaços e quebras de linha.
+    url = re.sub(r"\s+", "", url)
+    url = re.sub(r"^psql", "", url).strip("'\"")
+    # Se faltou o "?" antes dos parâmetros (ex.: "neondbsslmode=require"), recoloca.
+    url = re.sub(r"(/[^/?]*?)(sslmode=|channel_binding=)", r"\1?\2", url, count=1) if "?" not in url else url
     p = urlparse(url)
     # Parâmetros do endereço (ex.: ?sslmode=require do Neon) viram opções da conexão.
     opcoes = {k: v[-1] for k, v in parse_qs(p.query).items()}
+    host = p.hostname or ""
+    if host not in ("", "localhost", "127.0.0.1") and "." in host and "render" not in host and "sslmode" not in opcoes:
+        opcoes["sslmode"] = "require"  # bancos externos (Neon etc.) exigem conexão segura
     return {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": p.path.lstrip("/"),
+        # O nome do banco é sempre o último pedaço do caminho (ignora repetições coladas por engano).
+        "NAME": p.path.rstrip("/").rsplit("/", 1)[-1],
         "USER": unquote(p.username or ""),
         "PASSWORD": unquote(p.password or ""),
         "HOST": p.hostname or "",

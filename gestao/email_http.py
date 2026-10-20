@@ -43,7 +43,9 @@ class _BaseHTTP(BaseEmailBackend):
                 continue
             pedido = urllib.request.Request(
                 self.url, data=json.dumps(self._corpo(mensagem)).encode(), method="POST",
-                headers={"Content-Type": "application/json", "Accept": "application/json", **self._cabecalhos()})
+                # User-Agent próprio: a proteção do serviço de e-mail recusa o padrão "Python-urllib" (erro 1010).
+                headers={"Content-Type": "application/json", "Accept": "application/json",
+                         "User-Agent": "GestaoDaLoja/1.0 (+https://gestao.ordofraternus.com.br)", **self._cabecalhos()})
             try:
                 with urllib.request.urlopen(pedido, timeout=20) as resposta:
                     if 200 <= resposta.status < 300:

@@ -709,7 +709,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 19/10/2026-C")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 20/10/2026-A")
 
 
 def importacao_colunas():
@@ -1393,6 +1393,7 @@ class EmailPelaInternet(TestCase):
         url, cab, corpo = self._enviar(ResendBackend())
         self.assertEqual(url, "https://api.resend.com/emails")
         self.assertEqual(cab["Authorization"], "Bearer re_teste")
+        self.assertTrue(cab["User-agent"].startswith("GestaoDaLoja/"))
         self.assertEqual(corpo["to"], ["irmao@exemplo.com.br"])
         self.assertEqual(corpo["html"], "<p>Texto</p>")
 

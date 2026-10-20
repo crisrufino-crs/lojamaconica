@@ -56,6 +56,7 @@ urlpatterns = [
     path("tesouraria/lancamentos/<int:pk>/boleto/", views.boleto_gerar, name="boleto_gerar"),
     path("tesouraria/mensalidades/", views.mensalidades_serie, name="mensalidades_serie"),
     path("tesouraria/boletos/", views.boletos, name="boletos"),
+    path("tesouraria/analise/", views.analise_financeira, name="analise_financeira"),
     path("tesouraria/importar/", views.importar_financeiro, name="importar_financeiro"),
     path("tesouraria/planilha/", views.planilha_financeira, name="planilha_financeira"),
     path("tesouraria/remessas/<int:pk>/baixar/", views.remessa_baixar, name="remessa_baixar"),

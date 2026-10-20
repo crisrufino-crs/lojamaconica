@@ -1,0 +1,110 @@
+{% extends "gestao/base.html" %}{% load gestao_tags %}
+{% block titulo %}Análise financeira {{ d.ano }}{% endblock %}
+{% block conteudo %}
+<style>
+.viz{--viz-serie-1:#2a78d6;--viz-serie-2:#eb6834;--viz-grade:#ECEDEF;--viz-eixo:#C9CCD1;--viz-superficie:var(--card)}
+.viz-svg{width:100%;height:auto;display:block;overflow:visible}
+.viz-texto{font:12px Inter,system-ui,sans-serif;fill:var(--suave);font-variant-numeric:tabular-nums}
+.viz-texto.forte{fill:var(--texto);font-weight:500}
+.viz .marca{cursor:pointer;outline:none}
+.viz path.marca:hover,.viz path.marca:focus{filter:brightness(.88)}
+.viz circle.marca:focus{stroke:var(--texto);stroke-width:1}
+.legenda{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--texto);margin:4px 0 12px}
+.legenda span{display:inline-flex;align-items:center;gap:6px}
+.legenda i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.indicadores{display:grid;gap:16px;grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:16px}
+.indicadores .card{margin:0;border-top:3px solid var(--destaque);padding:18px 20px}
+.indicadores .rotulo{font-size:13px;font-weight:500;color:var(--suave)}
+.indicadores .valor{font-size:24px;font-weight:700;margin:4px 0;font-variant-numeric:tabular-nums}
+.indicadores .nota{font-size:13px;color:var(--suave)}
+.dupla{display:grid;gap:16px;grid-template-columns:1fr 1fr}.dupla .card{margin:0}
+.dica-flutuante{position:fixed;pointer-events:none;background:var(--texto);color:#fff;font-size:13px;padding:6px 10px;border-radius:6px;
+  box-shadow:0 4px 12px rgba(0,0,0,.2);z-index:50;display:none;max-width:280px}
+details.tabela-dados{margin-top:12px}details.tabela-dados summary{cursor:pointer;color:var(--primaria);font-size:14px}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.positivo{color:var(--sucesso)}.negativo{color:var(--erro)}
+@media (max-width:900px){.dupla{grid-template-columns:1fr}.indicadores{grid-template-columns:1fr 1fr}}@media (max-width:560px){.dupla,.indicadores{grid-template-columns:1fr}.viz section.card{overflow-x:auto}.viz-svg{min-width:640px}.dupla .viz-svg{min-width:460px}}
+@media print{.dica-flutuante{display:none!important}details.tabela-dados{display:none}.dupla{grid-template-columns:1fr 1fr}}
+</style>
+
+<div class="cabecalho"><div><h1>Análise financeira</h1>
+  <p class="suave">Visão geral das finanças da Loja em {{ d.ano }}. Valores quitados contam pela data da quitação; mensalidades pelo mês de referência.</p></div>
+  <div class="acoes nao-imprimir"><form method="get" style="display:flex;gap:8px;align-items:center">
+    <label for="ano" class="suave" style="font-size:13px">Ano</label>
+    <select name="ano" id="ano" onchange="this.form.submit()" style="padding:8px 10px">{% for a in anos %}<option value="{{ a }}" {% if a == d.ano %}selected{% endif %}>{{ a }}</option>{% endfor %}</select>
+    <noscript><button class="botao claro">Ver</button></noscript>
+    <button type="button" class="botao claro" onclick="window.print()">Imprimir</button></form></div></div>
+
+<div class="viz">
+<div class="indicadores">
+  <div class="card"><div class="rotulo">Receitas em {{ d.ano }}</div><div class="valor">{{ d.total_receitas|brl }}</div>
+    <div class="nota">{% if d.variacao_receita is not None %}{% if d.variacao_receita >= 0 %}▲{% else %}▼{% endif %} {{ d.variacao_receita }}% sobre {{ d.ano|add:"-1" }}{% else %}Sem dados de {{ d.ano|add:"-1" }} para comparar{% endif %}</div></div>
+  <div class="card"><div class="rotulo">Despesas em {{ d.ano }}</div><div class="valor">{{ d.total_despesas|brl }}</div>
+    <div class="nota">{% if d.variacao_despesa is not None %}{% if d.variacao_despesa >= 0 %}▲{% else %}▼{% endif %} {{ d.variacao_despesa }}% sobre {{ d.ano|add:"-1" }}{% else %}Sem dados de {{ d.ano|add:"-1" }} para comparar{% endif %}</div></div>
+  <div class="card"><div class="rotulo">Resultado do ano</div><div class="valor {% if d.resultado < 0 %}negativo{% else %}positivo{% endif %}">{{ d.resultado|brl }}</div>
+    <div class="nota">{% if d.resultado < 0 %}Gastou mais do que recebeu{% else %}Recebeu mais do que gastou{% endif %}</div></div>
+  <div class="card"><div class="rotulo">Saldo atual (caixa e bancos)</div><div class="valor">{{ d.saldo_atual|brl }}</div>
+    <div class="nota">Em 01/01/{{ d.ano }}: {{ d.saldo_inicio|brl }}</div></div>
+  <div class="card"><div class="rotulo">Em atraso (a receber vencido)</div><div class="valor negativo">{{ d.inadimplencia_total|brl }}</div>
+    <div class="nota">{{ d.inadimplentes }} Irmão{{ d.inadimplentes|pluralize }} com pendência</div></div>
+  <div class="card"><div class="rotulo">A receber (ainda no prazo)</div><div class="valor">{{ d.a_vencer_total|brl }}</div>
+    <div class="nota">Contas a pagar em aberto: {{ d.a_pagar_total|brl }}</div></div>
+</div>
+
+<section class="card"><h2>Receitas e despesas por mês</h2>
+  <div class="legenda"><span><i style="background:var(--viz-serie-1)"></i>Receitas</span><span><i style="background:var(--viz-serie-2)"></i>Despesas</span></div>
+  {{ graf.mensal }}
+  <details class="tabela-dados"><summary>Ver tabela</summary><div class="rolagem"><table>
+    <thead><tr><th>Mês</th><th class="num">Receitas</th><th class="num">Despesas</th><th class="num">Resultado</th><th class="num">Saldo ao fim do mês</th></tr></thead>
+    <tbody>{% for l in tabela %}<tr><td>{{ l.mes }}</td><td class="num">{{ l.receita|brl }}</td><td class="num">{{ l.despesa|brl }}</td>
+      <td class="num {% if l.resultado < 0 %}negativo{% endif %}">{{ l.resultado|brl }}</td><td class="num">{% if l.saldo is not None %}{{ l.saldo|brl }}{% else %}—{% endif %}</td></tr>{% endfor %}</tbody>
+    <tfoot><tr><th>Total</th><th class="num">{{ d.total_receitas|brl }}</th><th class="num">{{ d.total_despesas|brl }}</th><th class="num">{{ d.resultado|brl }}</th><th></th></tr></tfoot>
+  </table></div></details>
+</section>
+
+<section class="card"><h2>Saldo em caixa e bancos</h2>
+  <p class="suave" style="margin-top:-4px">Soma de todas as contas ao fim de cada mês (inclui transferências e saldos iniciais).</p>
+  {{ graf.saldo }}
+</section>
+
+<div class="dupla">
+  <section class="card"><h2>De onde vem o dinheiro</h2><p class="suave" style="margin-top:-4px">Receitas quitadas por conta do plano.</p>{{ graf.receitas_plano }}</section>
+  <section class="card"><h2>Para onde vai o dinheiro</h2><p class="suave" style="margin-top:-4px">Despesas quitadas por conta do plano.</p>{{ graf.despesas_plano }}</section>
+</div>
+
+<section class="card" style="margin-top:16px"><h2>Mensalidades pagas</h2>
+  <p class="suave" style="margin-top:-4px">Percentual das mensalidades já vencidas de cada mês que foram pagas (isentas e canceladas não entram na conta).</p>
+  {{ graf.adimplencia }}
+  <details class="tabela-dados"><summary>Ver tabela</summary><div class="rolagem"><table>
+    <thead><tr><th>Mês</th><th class="num">Pagas</th><th class="num">Em atraso</th><th class="num">A vencer</th><th class="num">Isentas</th><th class="num">% pagas</th></tr></thead>
+    <tbody>{% for l in tabela %}<tr><td>{{ l.mes }}</td><td class="num">{{ l.situacao.pago }}</td><td class="num">{{ l.situacao.aberto_vencido }}</td>
+      <td class="num">{{ l.situacao.aberto }}</td><td class="num">{{ l.situacao.isento }}</td><td class="num">{% if l.adimplencia is not None %}{{ l.adimplencia }}%{% else %}—{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div></details>
+</section>
+
+<section class="card"><h2>Maiores pendências</h2>
+  {% if d.devedores %}<div class="rolagem"><table>
+    <thead><tr><th>Irmão</th><th class="num">Lançamentos vencidos</th><th class="num">Total em atraso</th></tr></thead>
+    <tbody>{% for x in d.devedores %}<tr><td>{{ x.irmao__nome }}</td><td class="num">{{ x.qtd }}</td><td class="num negativo">{{ x.total|brl }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="ajuda nao-imprimir" style="margin-top:8px">Para cobrar ou dar baixa, use <a href="{% url 'receber_lista' %}?situacao=vencido">A receber › Vencidos</a>.</p>
+  {% else %}<p class="vazio">Nenhum Irmão com pagamento em atraso. 🎉</p>{% endif %}
+</section>
+</div>
+
+<div class="dica-flutuante" id="dica" role="tooltip"></div>
+<script>
+(function(){
+  var dica=document.getElementById('dica');
+  function mostrar(e){var t=e.target.closest('[data-dica]');if(!t)return;dica.textContent=t.getAttribute('data-dica');dica.style.display='block';posicionar(e,t)}
+  function posicionar(e,t){var x,y;if(e.clientX!==undefined&&e.type.indexOf('mouse')===0){x=e.clientX;y=e.clientY}else{var r=t.getBoundingClientRect();x=r.left+r.width/2;y=r.top}
+    var l=Math.min(x+14,window.innerWidth-dica.offsetWidth-8);dica.style.left=Math.max(8,l)+'px';dica.style.top=Math.max(8,y-dica.offsetHeight-12)+'px'}
+  function esconder(){dica.style.display='none'}
+  document.querySelectorAll('.viz-svg').forEach(function(s){
+    s.addEventListener('mouseover',mostrar);s.addEventListener('mousemove',function(e){if(dica.style.display==='block'){var t=e.target.closest('[data-dica]');t?posicionar(e,t):esconder()}});
+    s.addEventListener('mouseleave',esconder);s.addEventListener('focusin',mostrar);s.addEventListener('focusout',esconder);
+    s.querySelectorAll('title').forEach(function(t){t.remove()});
+  });
+})();
+</script>
+{% endblock %}

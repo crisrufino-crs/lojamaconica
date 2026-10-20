@@ -709,7 +709,7 @@ class AdministradorQueNuncaEntrou(TestCase):
         call_command("garantir_admin", stdout=StringIO())
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("troquei-a-minha-senha-9"))  # já entrou: a instalação não mexe mais
-        self.assertContains(self.client.get(reverse("entrar")), "Versão 20/10/2026-A")
+        self.assertContains(self.client.get(reverse("entrar")), "Versão 20/10/2026-B")
 
 
 def importacao_colunas():
@@ -1404,3 +1404,29 @@ class EmailPelaInternet(TestCase):
         self.assertEqual(url, "https://api.brevo.com/v3/smtp/email")
         self.assertEqual(cab["Api-key"], "xkeysib-teste")
         self.assertEqual(corpo["sender"], {"email": "nao-responda@ordofraternus.com.br", "name": "Loja"})
+
+
+class AnaliseFinanceira(Base):
+    def test_tela_mostra_totais_graficos_e_pendencias(self):
+        hoje = self.hoje
+        self.receber(valor="100", status="pago", data_pagamento=hoje, valor_pago=D("100"), conta=self.caixa)
+        Lancamento.objects.create(loja=self.loja, tipo="P", descricao="Luz", plano=self.plano["2.3"], valor=D("40"),
+                                  vencimento=hoje, status="pago", data_pagamento=hoje, valor_pago=D("40"), conta=self.caixa)
+        self.receber(irmao=self.irmaos[2], valor="80", vencimento=hoje - timedelta(days=40))
+        self.entrar(self.tesoureiro)
+        resposta = self.client.get(reverse("analise_financeira"))
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "R$ 100,00")
+        self.assertContains(resposta, "R$ 60,00")          # resultado
+        self.assertContains(resposta, "<svg", count=5)
+        self.assertContains(resposta, "Irmão 2")           # maior pendência
+        self.assertContains(resposta, "R$ 80,00")
+        self.assertEqual(self.client.get(reverse("analise_financeira") + "?ano=abc").status_code, 200)
+
+    def test_so_tesouraria_e_so_da_propria_loja(self):
+        self.entrar(self.secretario)
+        self.assertEqual(self.client.get(reverse("analise_financeira")).status_code, 403)
+        Lancamento.objects.create(loja=self.outra, tipo="R", descricao="Alheio", plano=PlanoConta.objects.filter(loja=self.outra, codigo="1.1").first(),
+                                  valor=D("999"), vencimento=self.hoje, status="pago", data_pagamento=self.hoje, valor_pago=D("999"))
+        self.entrar(self.master)
+        self.assertNotContains(self.client.get(reverse("analise_financeira")), "999,00")

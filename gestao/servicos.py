@@ -310,3 +310,90 @@ def enviar_senha_por_email(usuario, senha, endereco_do_sistema):
         from_email=settings.DEFAULT_FROM_EMAIL, to=[usuario.email],
         reply_to=[loja.email] if loja and loja.email else None)
     return mensagem.send() == 1
+
+
+# --- Análise financeira (Tesouraria) --------------------------------------------
+MESES_CURTOS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+
+
+def _pagos_por_mes(loja, ano):
+    """{(tipo, mês): total pago} pela data da quitação."""
+    linhas = (Lancamento.objects.filter(loja=loja, status="pago", data_pagamento__year=ano)
+              .values_list("tipo", "data_pagamento__month").annotate(s=Sum("valor_pago")))
+    return {(t, m): s or ZERO for t, m, s in linhas}
+
+
+def saldo_geral(loja, ate):
+    return sum((saldo_conta(c, ate) for c in ContaBancaria.objects.filter(loja=loja)), ZERO)
+
+
+def analise_financeira(loja, ano):
+    """Números e séries da tela "Análise financeira" da Tesouraria."""
+    hoje = timezone.localdate()
+    pagos = _pagos_por_mes(loja, ano)
+    receitas = [pagos.get(("R", m), ZERO) for m in range(1, 13)]
+    despesas = [pagos.get(("P", m), ZERO) for m in range(1, 13)]
+    ultimo_mes = 12 if ano < hoje.year else (hoje.month if ano == hoje.year else 0)
+
+    saldo_inicio = saldo_geral(loja, date(ano, 1, 1) - timedelta(days=1))
+    saldos, acumulado = [], saldo_inicio
+    contas = list(ContaBancaria.objects.filter(loja=loja))
+    for m in range(1, 13):
+        if m > ultimo_mes:
+            saldos.append(None)
+            continue
+        saldos.append(sum((saldo_conta(c, limites_do_mes(ano, m)[1]) for c in contas), ZERO))
+
+    anteriores = _pagos_por_mes(loja, ano - 1)
+    receita_ant = sum((v for (t, _), v in anteriores.items() if t == "R"), ZERO)
+    despesa_ant = sum((v for (t, _), v in anteriores.items() if t == "P"), ZERO)
+
+    planos = {p.pk: p for p in PlanoConta.objects.filter(loja=loja)}
+    por_plano = (Lancamento.objects.filter(loja=loja, status="pago", data_pagamento__year=ano)
+                 .values_list("tipo", "plano_id").annotate(s=Sum("valor_pago")))
+    receitas_plano = sorted(((planos[p].nome, s) for t, p, s in por_plano if t == "R" and s), key=lambda x: -x[1])
+    despesas_plano = sorted(((planos[p].nome, s) for t, p, s in por_plano if t == "P" and s), key=lambda x: -x[1])
+
+    # Mensalidades do ano, pelo mês de referência (ou vencimento, quando não há referência)
+    mensal = Lancamento.objects.filter(loja=loja, tipo="R", plano__codigo="1.1").exclude(status="cancelado")
+    mensal = mensal.filter(Q(competencia__year=ano) | Q(competencia__isnull=True, vencimento__year=ano))
+    situacao = {m: Counter() for m in range(1, 13)}
+    for status, venc, comp in mensal.values_list("status", "vencimento", "competencia"):
+        mes = (comp or venc).month
+        chave = "aberto_vencido" if status == "aberto" and venc < hoje else status
+        situacao[mes][chave] += 1
+    adimplencia = []
+    for m in range(1, 13):
+        c = situacao[m]
+        cobradas = c["pago"] + c["aberto_vencido"]
+        adimplencia.append(round(100 * c["pago"] / cobradas) if cobradas and m <= ultimo_mes else None)
+
+    vencidos = Lancamento.objects.filter(loja=loja, tipo="R", status="aberto", vencimento__lt=hoje)
+    devedores = (vencidos.exclude(irmao=None).values("irmao__nome").annotate(total=Sum("valor"), qtd=Count("id"))
+                 .order_by("-total", "irmao__nome")[:10])
+    a_vencer = Lancamento.objects.filter(loja=loja, tipo="R", status="aberto", vencimento__gte=hoje)
+    a_pagar = Lancamento.objects.filter(loja=loja, tipo="P", status="aberto")
+
+    total_r, total_d = sum(receitas, ZERO), sum(despesas, ZERO)
+    return {
+        "ano": ano, "meses": MESES_CURTOS, "ultimo_mes": ultimo_mes,
+        "receitas": receitas, "despesas": despesas,
+        "resultados": [r - d for r, d in zip(receitas, despesas)],
+        "total_receitas": total_r, "total_despesas": total_d, "resultado": total_r - total_d,
+        "receita_anterior": receita_ant, "despesa_anterior": despesa_ant,
+        "variacao_receita": _variacao(total_r, receita_ant), "variacao_despesa": _variacao(total_d, despesa_ant),
+        "saldo_inicio": saldo_inicio, "saldos": saldos, "saldo_atual": saldo_geral(loja, hoje),
+        "receitas_plano": receitas_plano, "despesas_plano": despesas_plano,
+        "situacao_mensal": [situacao[m] for m in range(1, 13)], "adimplencia": adimplencia,
+        "inadimplencia_total": vencidos.aggregate(s=Sum("valor"))["s"] or ZERO,
+        "inadimplentes": vencidos.exclude(irmao=None).values("irmao").distinct().count(),
+        "devedores": list(devedores),
+        "a_vencer_total": a_vencer.aggregate(s=Sum("valor"))["s"] or ZERO,
+        "a_pagar_total": a_pagar.aggregate(s=Sum("valor"))["s"] or ZERO,
+    }
+
+
+def _variacao(atual, anterior):
+    if not anterior:
+        return None
+    return round(float((atual - anterior) / anterior * 100))

@@ -795,3 +795,35 @@ def arquivo(request, caminho):
     # Cada arquivo tem nome único e nunca muda: o navegador pode guardar por 30 dias (abre mais rápido).
     resposta["Cache-Control"] = "private, max-age=2592000, immutable"
     return resposta
+
+
+@exige("tesouraria")
+def analise_financeira(request):
+    """Relatório de análise financeira geral da Tesouraria, com gráficos."""
+    from . import graficos
+    hoje = timezone.localdate()
+    try:
+        ano = int(request.GET.get("ano", hoje.year))
+    except ValueError:
+        ano = hoje.year
+    ano = min(max(ano, 2000), hoje.year + 1)
+    d = servicos.analise_financeira(request.loja, ano)
+    meses = d["meses"]
+    graf = {
+        "mensal": graficos.barras_agrupadas(
+            meses, [("Receitas", d["receitas"], "var(--viz-serie-1)"), ("Despesas", d["despesas"], "var(--viz-serie-2)")],
+            f"Receitas e despesas quitadas por mês em {ano}"),
+        "saldo": graficos.linha(meses, d["saldos"], "Saldo ao fim do mês", f"Saldo em caixa e bancos ao fim de cada mês de {ano}"),
+        "adimplencia": graficos.colunas_percentuais(meses, d["adimplencia"], "Mensalidades pagas",
+                                                   f"Percentual de mensalidades pagas por mês em {ano}"),
+        "receitas_plano": graficos.barras_horizontais(d["receitas_plano"], "Receitas", f"Receitas por conta em {ano}"),
+        "despesas_plano": graficos.barras_horizontais(d["despesas_plano"], "Despesas", f"Despesas por conta em {ano}",
+                                                     cor="var(--viz-serie-2)"),
+    }
+    anos = sorted({hoje.year, ano, *(dt.year for dt in Lancamento.objects.filter(loja=request.loja)
+                                                       .dates("vencimento", "year"))}, reverse=True)
+    tabela = [{"mes": meses[i], "receita": d["receitas"][i], "despesa": d["despesas"][i], "resultado": d["resultados"][i],
+               "saldo": d["saldos"][i], "adimplencia": d["adimplencia"][i], "situacao": d["situacao_mensal"][i]}
+              for i in range(12)]
+    return render(request, "gestao/analise_financeira.html", {"modulo": "tesouraria", "d": d, "graf": graf,
+                                                              "anos": anos, "tabela": tabela})
